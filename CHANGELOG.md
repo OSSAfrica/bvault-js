@@ -1,5 +1,11 @@
 # bvault-js
 
+## 0.2.2
+
+### Patch Changes
+
+- 88317d7: clean dist
+
 ## 0.2.1
 
 ### Patch Changes
