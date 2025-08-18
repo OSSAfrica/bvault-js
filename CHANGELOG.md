@@ -1,5 +1,11 @@
 # bvault-js
 
+## 0.3.1
+
+### Patch Changes
+
+- c7c58fa: Docs update
+
 ## 0.3.0
 
 ### Minor Changes
