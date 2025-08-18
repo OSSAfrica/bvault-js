@@ -1,5 +1,11 @@
 # bvault-js
 
+## 0.3.0
+
+### Minor Changes
+
+- e4d6207: add support for session storage
+
 ## 0.2.3
 
 ### Patch Changes
