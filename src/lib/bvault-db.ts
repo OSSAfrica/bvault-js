@@ -1,4 +1,8 @@
 // src/lib/bvault-db.ts
+
+/**
+ * Interface defining the BVault database contract for IndexedDB operations.
+ */
 interface BVaultDatabase {
   db: IDBDatabase | null;
 
@@ -21,6 +25,10 @@ interface BVaultDatabase {
   verifyStore(storeName: string): Promise<IDBDatabase>;
 }
 
+/**
+ * Schema definition for the BVault IndexedDB database.
+ * Contains separate stores for local and session encryption metadata.
+ */
 interface DatabaseSchema {
   version: number;
   stores: {
@@ -29,19 +37,36 @@ interface DatabaseSchema {
   }[];
 }
 
+/**
+ * IndexedDB schema for BVault.
+ * We keep separate object stores for local and session storage metadata
+ * to avoid collisions and ensure proper cleanup.
+ */
 const DB_SCHEMA: DatabaseSchema = {
-  version: 1,
+  version: 2, // bump version when schema changes
   stores: [
     {
-      name: 'encryption_metadata',
+      name: 'encryption_metadata_local',
+      options: { keyPath: 'key' },
+    },
+    {
+      name: 'encryption_metadata_session',
       options: { keyPath: 'key' },
     },
   ],
 };
 
+/**
+ * BVaultDB provides a simple wrapper around IndexedDB for storing encryption metadata.
+ * It handles initialization, schema verification, and CRUD operations.
+ */
 const BVaultDB: BVaultDatabase = {
   db: null,
 
+  /**
+   * Initializes the database and ensures object stores exist.
+   * Recreates DB if schema mismatch is detected.
+   */
   async initialize(): Promise<IDBDatabase> {
     if (this.db) return this.db;
 
@@ -62,7 +87,7 @@ const BVaultDB: BVaultDatabase = {
       request.onsuccess = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
 
-        // Ensure all stores exist
+        // Verify schema consistency
         const missingStores = DB_SCHEMA.stores.filter(
           (store) => !db.objectStoreNames.contains(store.name),
         );
@@ -74,7 +99,6 @@ const BVaultDB: BVaultDatabase = {
           db.close();
           indexedDB.deleteDatabase('bvault').onsuccess = () => {
             this.db = null;
-            // Try again recursively
             this.initialize().then(resolve).catch(reject);
           };
           return;
@@ -94,6 +118,9 @@ const BVaultDB: BVaultDatabase = {
     });
   },
 
+  /**
+   * Stores a record in the given object store.
+   */
   async storeData(
     storeName: string,
     data: any,
@@ -112,6 +139,9 @@ const BVaultDB: BVaultDatabase = {
     });
   },
 
+  /**
+   * Retrieves a record by key from the given object store.
+   */
   async getData<T>(
     storeName: string,
     key: IDBValidKey,
@@ -127,6 +157,9 @@ const BVaultDB: BVaultDatabase = {
     });
   },
 
+  /**
+   * Retrieves all records from the given object store.
+   */
   async getAllData<T>(storeName: string): Promise<T[]> {
     const db = await this.verifyStore(storeName);
     return new Promise((resolve, reject) => {
@@ -139,6 +172,9 @@ const BVaultDB: BVaultDatabase = {
     });
   },
 
+  /**
+   * Deletes a record by key from the given object store.
+   */
   async deleteData(storeName: string, key: IDBValidKey): Promise<void> {
     const db = await this.verifyStore(storeName);
     return new Promise((resolve, reject) => {
@@ -151,6 +187,9 @@ const BVaultDB: BVaultDatabase = {
     });
   },
 
+  /**
+   * Clears all records from the given object store.
+   */
   async clearStore(storeName: string): Promise<void> {
     const db = await this.verifyStore(storeName);
     return new Promise((resolve, reject) => {
@@ -163,6 +202,9 @@ const BVaultDB: BVaultDatabase = {
     });
   },
 
+  /**
+   * Ensures that the object store exists and returns the active DB instance.
+   */
   async verifyStore(storeName: string): Promise<IDBDatabase> {
     const db = await this.initialize();
     if (!db.objectStoreNames.contains(storeName)) {
