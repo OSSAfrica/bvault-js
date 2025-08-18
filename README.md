@@ -89,6 +89,43 @@ secureLocalStorage.removeItem('userProfile');
 secureLocalStorage.clear();
 ```
 
+### 🔐 Secure Session Storage Wrapper
+
+bVault-js provides a wrapper around `sessionStorage` so you can securely store sensitive data that should only persist
+for the duration of the browser session.
+
+#### Initialization (must be done once at app entry point)
+
+```javascript
+import { initializeSecureStorage } from 'bvault-js';
+
+async function bootstrap() {
+  await initializeSecureStorage('my-strong-password');
+  // Continue with app startup...
+}
+
+bootstrap();
+```
+
+#### Usage Example
+
+```javascript
+import { secureSessionStorage } from 'bvault-js';
+
+// Store data securely (persists only for this session)
+await secureSessionStorage.setItem('authToken', 'abc123');
+
+// Retrieve data securely
+const stored = await secureSessionStorage.getItem('authToken');
+console.log(stored); // "abc123"
+
+// Remove a specific key
+secureSessionStorage.removeItem('authToken');
+
+// Clear everything for this session
+secureSessionStorage.clear();
+```
+
 #### Framework Examples
 
 - **React (entry point initialization)**
@@ -128,16 +165,20 @@ then
 ```tsx
 // App.tsx
 import { useEffect, useState } from 'react';
-import { secureLocalStorage } from 'bvault-js';
+import { secureLocalStorage, secureSessionStorage } from 'bvault-js';
 
 export default function App() {
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
     (async () => {
-      await secureLocalStorage.setItem('profile', { username: 'alice' });
+      await secureLocalStorage.setItem('profile', { username: 'carol' });
       const data = await secureLocalStorage.getItem('profile');
-      if (data) setProfile(JSON.parse(data));
+      if (data) profile = JSON.parse(data);
+
+      await secureSessionStorage.setItem('role', 'admin');
+      const roleData = await secureSession.getItem('role');
+      if (roleData) role = JSON.parse(roleData);
     })();
   }, []);
 
@@ -181,19 +222,25 @@ then
 <!-- App.vue -->
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { secureLocalStorage } from 'bvault-js';
+import { secureLocalStorage, secureSessionStorage } from 'bvault-js';
 
 const profile = ref<any>(null);
 
 onMounted(async () => {
   await secureLocalStorage.setItem('profile', { username: 'bob' });
   const data = await secureLocalStorage.getItem('profile');
-  if (data) profile.value = JSON.parse(data);
+  if (data) profile = JSON.parse(data);
+
+  await secureSessionStorage.setItem('role', 'admin');
+  const roleData = await secureSessionStorage.getItem('role');
+  if (roleData) role = JSON.parse(roleData);
 });
 </script>
 
 <template>
   <p v-if="profile">Hello {{ profile.username }}</p>
+  <p v-else>Loading...</p>
+  <p v-if="role">Role: {{ role }}</p>
   <p v-else>Loading...</p>
 </template>
 ```
@@ -232,7 +279,7 @@ then
 <!-- App.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { secureLocalStorage } from 'bvault-js';
+  import { secureLocalStorage, secureSessionStorage } from 'bvault-js';
 
   let profile: any = null;
 
@@ -240,10 +287,15 @@ then
     await secureLocalStorage.setItem('profile', { username: 'carol' });
     const data = await secureLocalStorage.getItem('profile');
     if (data) profile = JSON.parse(data);
+
+    await secureSessionStorage.setItem('role', 'admin');
+    const roleData = await secureSessionStorage.getItem('role');
+    if (roleData) role = JSON.parse(roleData);
   });
 </script>
 
 <p>{#if profile}Hello {profile.username}{:else}Loading...{/if}</p>
+<p>{#if role}Role: {role}{:else}Loading...{/if}</p>
 ```
 
 ---
@@ -312,15 +364,11 @@ Encrypts data using a password
 
 **Returns:** Promise resolving to:
 
-```javascript
+```json
 {
   encryptedData: string,
-    iv
-:
-  string,
-    salt
-:
-  string
+  iv: string,
+  salt: string
 }
 ```
 
@@ -336,6 +384,15 @@ Secure wrapper around `localStorage` with async encryption/decryption.
 - `await secureLocalStorage.getItem(key: string): Promise<string | null>`
 - `secureLocalStorage.removeItem(key: string)`
 - `secureLocalStorage.clear()`
+
+### `secureSessionStorage`
+
+Secure wrapper around `sessionStorage` with async encryption/decryption.
+
+- `await secureSessionStorage.setItem(key: string, value: unknown)`
+- `await secureSessionStorage.getItem(key: string): Promise<string | null>`
+- `secureSessionStorage.removeItem(key: string)`
+- `secureSessionStorage.clear()`
 
 ### `initializeSecureStorage(password: string)`
 
