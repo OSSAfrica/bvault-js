@@ -180,16 +180,16 @@ then
 ```vue
 <!-- App.vue -->
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue';
-  import { secureLocalStorage } from 'bvault-js';
+import { ref, onMounted } from 'vue';
+import { secureLocalStorage } from 'bvault-js';
 
-  const profile = ref<any>(null);
+const profile = ref<any>(null);
 
-  onMounted(async () => {
-    await secureLocalStorage.setItem('profile', { username: 'bob' });
-    const data = await secureLocalStorage.getItem('profile');
-    if (data) profile.value = JSON.parse(data);
-  });
+onMounted(async () => {
+  await secureLocalStorage.setItem('profile', { username: 'bob' });
+  const data = await secureLocalStorage.getItem('profile');
+  if (data) profile.value = JSON.parse(data);
+});
 </script>
 
 <template>
@@ -277,7 +277,11 @@ import { encrypt, decrypt } from 'bvault-js';
 
 async function saveConfig(config, password) {
   const encrypted = await encrypt(JSON.stringify(config), password);
-  return { config: encrypted.encryptedData, iv: encrypted.iv, salt: encrypted.salt };
+  return {
+    config: encrypted.encryptedData,
+    iv: encrypted.iv,
+    salt: encrypted.salt,
+  };
 }
 
 async function loadConfig(storedConfig, password) {
@@ -419,16 +423,16 @@ We're actively working to enhance bVault-js with these planned features:
 - [ ] **Stream Processing**: Support for large file encryption through stream processing
 - [ ] **Web Worker Support**: Offload crypto operations to background threads
 - [ ] **Enhanced Security**:
-    - [ ] Add authenticated data support (AAD) for AES-GCM
-    - [ ] Implement configurable iteration counts
-    - [ ] Add key derivation memory hardening (Argon2 support)
+  - [ ] Add authenticated data support (AAD) for AES-GCM
+  - [ ] Implement configurable iteration counts
+  - [ ] Add key derivation memory hardening (Argon2 support)
 - [ ] **Extended Environments**:
-    - [ ] React Native compatibility
-    - [ ] Service worker support
+  - [ ] React Native compatibility
+  - [ ] Service worker support
 - [ ] **Developer Experience**:
-    - [ ] Additional error diagnostics
-    - [ ] Password strength meter integration
-    - [ ] TypeScript type enhancements
+  - [ ] Additional error diagnostics
+  - [ ] Password strength meter integration
+  - [ ] TypeScript type enhancements
 
 ## When to Consider Alternatives
 
