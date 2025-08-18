@@ -4,8 +4,6 @@
 [![wakatime](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c.svg)](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c)
 [![NPM Type Definitions](https://img.shields.io/npm/types/bvault-js?logo=typescript)](https://img.shields.io/npm/types/bvault-js)
 [![GitHub commit activity](https://img.shields.io/github/commit-activity/m/kurtiz/bvault-js)](https://img.shields.io/github/commit-activity/m/kurtiz/bvault-js)
-[![npm bundle size](https://img.shields.io/bundlephobia/minzip/bvault-js)](https://img.shields.io/bundlephobia/minzip/bvault-js)
-[![npm bundle size](https://img.shields.io/bundlephobia/min/bvault-js)](https://img.shields.io/bundlephobia/min/bvault-js)
 [![GitHub License](https://img.shields.io/github/license/kurtiz/bvault-js)](https://github.com/kurtiz/bvault-js)
 
 bVault-js is a type-safe, lightweight, zero-dependency cryptographic library for secure encryption and decryption in
@@ -15,11 +13,13 @@ environments. It implements AES-GCM encryption with PBKDF2 key derivation, provi
 ## Features
 
 - 🔒 AES-GCM 256-bit encryption
-- 🔑 Password-based key derivation (PBKDF2 with 100,000 iterations)
+- 🔑 Password-based key derivation (PBKDF2 with 100 thousand iterations)
 - 🧂 Automatic salt and IV generation
 - 🛡️ Built-in error handling for cryptographic operations
 - 💻 Works in browsers (using Web Crypto API)
 - 📦 **Secure Local Storage Wrapper** – store/retrieve data in `localStorage` securely with automatic
+  encryption/decryption
+- 📦 **Secure Session Storage Wrapper** – store/retrieve data in `sessionStorage` securely with automatic
   encryption/decryption
 
 ## Installation
