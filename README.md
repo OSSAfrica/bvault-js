@@ -8,7 +8,8 @@
 [![npm bundle size](https://img.shields.io/bundlephobia/min/bvault-js)](https://img.shields.io/bundlephobia/min/bvault-js)
 [![GitHub License](https://img.shields.io/github/license/kurtiz/bvault-js)](https://github.com/kurtiz/bvault-js)
 
-bVault-js is a type-safe, lightweight, zero-dependency cryptographic library for secure encryption and decryption in browser
+bVault-js is a type-safe, lightweight, zero-dependency cryptographic library for secure encryption and decryption in
+browser
 environments. It implements AES-GCM encryption with PBKDF2 key derivation, providing a simple API for data protection.
 
 ## Features
@@ -18,6 +19,8 @@ environments. It implements AES-GCM encryption with PBKDF2 key derivation, provi
 - 🧂 Automatic salt and IV generation
 - 🛡️ Built-in error handling for cryptographic operations
 - 💻 Works in browsers (using Web Crypto API)
+- 📦 **Secure Local Storage Wrapper** – store/retrieve data in `localStorage` securely with automatic
+  encryption/decryption
 
 ## Installation
 
@@ -46,10 +49,209 @@ const decrypted = await decrypt(encryptedData, password, iv, salt);
 console.log('Decrypted:', decrypted); // 'My confidential information'
 ```
 
+### 🔐 Secure Local Storage Wrapper
+
+bVault-js provides a wrapper around `localStorage` so you can safely persist sensitive data in the browser.
+
+#### Initialization (must be done once at app entry point)
+
+```javascript
+import { initializeSecureStorage } from 'bvault-js';
+
+async function bootstrap() {
+  await initializeSecureStorage('my-strong-password');
+  // Continue with app startup...
+}
+
+bootstrap();
+```
+
+#### Usage Example
+
+```javascript
+import { secureLocalStorage } from 'bvault-js';
+
+// Store data securely
+await secureLocalStorage.setItem('userProfile', {
+  username: 'alice',
+  email: 'alice@example.com',
+});
+
+// Retrieve data securely
+const stored = await secureLocalStorage.getItem('userProfile');
+const profile = stored ? JSON.parse(stored) : null;
+console.log(profile);
+
+// Remove a specific key
+secureLocalStorage.removeItem('userProfile');
+
+// Clear everything
+secureLocalStorage.clear();
+```
+
+#### Framework Examples
+
+- **React (entry point initialization)**
+
+```tsx
+// main.tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import { initializeSecureStorage } from 'bvault-js';
+
+async function bootstrap() {
+  await initializeSecureStorage('react-password');
+  ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+}
+
+bootstrap();
+```
+
+or
+
+```tsx
+// main.tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import { initializeSecureStorage } from 'bvault-js';
+
+(async () => {
+  await initializeSecureStorage('react-password');
+  ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+})();
+```
+
+then
+
+```tsx
+// App.tsx
+import { useEffect, useState } from 'react';
+import { secureLocalStorage } from 'bvault-js';
+
+export default function App() {
+  const [profile, setProfile] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => {
+      await secureLocalStorage.setItem('profile', { username: 'alice' });
+      const data = await secureLocalStorage.getItem('profile');
+      if (data) setProfile(JSON.parse(data));
+    })();
+  }, []);
+
+  return <p>{profile ? `Hello ${profile.username}` : 'Loading...'}</p>;
+}
+```
+
+- **Vue 3**
+
+```ts
+// main.ts
+import { createApp } from 'vue';
+import App from './App.vue';
+import { initializeSecureStorage } from 'bvault-js';
+
+async function bootstrap() {
+  await initializeSecureStorage('vue-password');
+  createApp(App).mount('#app');
+}
+
+bootstrap();
+```
+
+or
+
+```ts
+// main.ts
+import { createApp } from 'vue';
+import App from './App.vue';
+import { initializeSecureStorage } from 'bvault-js';
+
+(async () => {
+  await initializeSecureStorage('vue-password');
+  createApp(App).mount('#app');
+})();
+```
+
+then
+
+```vue
+<!-- App.vue -->
+<script setup lang="ts">
+  import { ref, onMounted } from 'vue';
+  import { secureLocalStorage } from 'bvault-js';
+
+  const profile = ref<any>(null);
+
+  onMounted(async () => {
+    await secureLocalStorage.setItem('profile', { username: 'bob' });
+    const data = await secureLocalStorage.getItem('profile');
+    if (data) profile.value = JSON.parse(data);
+  });
+</script>
+
+<template>
+  <p v-if="profile">Hello {{ profile.username }}</p>
+  <p v-else>Loading...</p>
+</template>
+```
+
+- **Svelte**
+
+```ts
+// main.ts
+import App from './App.svelte';
+import { initializeSecureStorage } from 'bvault-js';
+
+async function bootstrap() {
+  await initializeSecureStorage('svelte-password');
+  new App({ target: document.getElementById('app')! });
+}
+
+bootstrap();
+```
+
+or
+
+```ts
+// main.ts
+import App from './App.svelte';
+import { initializeSecureStorage } from 'bvault-js';
+
+(async () => {
+  await initializeSecureStorage('svelte-password');
+  new App({ target: document.getElementById('app')! });
+})();
+```
+
+then
+
+```svelte
+<!-- App.svelte -->
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { secureLocalStorage } from 'bvault-js';
+
+  let profile: any = null;
+
+  onMount(async () => {
+    await secureLocalStorage.setItem('profile', { username: 'carol' });
+    const data = await secureLocalStorage.getItem('profile');
+    if (data) profile = JSON.parse(data);
+  });
+</script>
+
+<p>{#if profile}Hello {profile.username}{:else}Loading...{/if}</p>
+```
+
+---
+
 ### File Encryption
 
 ```javascript
-import { encrypt, decrypt } from 'bvault-js';
+import { encrypt } from 'bvault-js';
 
 async function encryptFile(file, password) {
   const reader = new FileReader();
@@ -66,18 +268,6 @@ async function encryptFile(file, password) {
     reader.readAsText(file);
   });
 }
-
-// Usage
-const fileInput = document.querySelector('input[type="file"]');
-fileInput.addEventListener('change', async (event) => {
-  const file = event.target.files[0];
-  const encryptedFile = await encryptFile(file, 'mypassword');
-
-  // Save encryptedFile components to storage
-  localStorage.setItem('encryptedFile', encryptedFile.encryptedData);
-  localStorage.setItem('iv', encryptedFile.iv);
-  localStorage.setItem('salt', encryptedFile.salt);
-});
 ```
 
 ### Secure Configuration Storage
@@ -85,17 +275,11 @@ fileInput.addEventListener('change', async (event) => {
 ```javascript
 import { encrypt, decrypt } from 'bvault-js';
 
-// Store configuration securely
 async function saveConfig(config, password) {
   const encrypted = await encrypt(JSON.stringify(config), password);
-  return {
-    config: encrypted.encryptedData,
-    iv: encrypted.iv,
-    salt: encrypted.salt,
-  };
+  return { config: encrypted.encryptedData, iv: encrypted.iv, salt: encrypted.salt };
 }
 
-// Retrieve configuration
 async function loadConfig(storedConfig, password) {
   try {
     const decrypted = await decrypt(
@@ -106,20 +290,9 @@ async function loadConfig(storedConfig, password) {
     );
     return JSON.parse(decrypted);
   } catch (error) {
-    console.error('Failed to decrypt configuration:', error);
     return null;
   }
 }
-
-// Usage example
-const appConfig = { apiKey: '12345', userPrefs: { darkMode: true } };
-const password = 'configPassword';
-
-// Save configuration
-const encryptedConfig = await saveConfig(appConfig, password);
-
-// Later... load configuration
-const loadedConfig = await loadConfig(encryptedConfig, password);
 ```
 
 ## API Reference
@@ -137,9 +310,13 @@ Encrypts data using a password
 
 ```javascript
 {
-  encryptedData: string, // Base64-encoded ciphertext
-  iv: string,            // Base64-encoded initialization vector
-  salt: string           // Base64-encoded salt
+  encryptedData: string,
+    iv
+:
+  string,
+    salt
+:
+  string
 }
 ```
 
@@ -147,51 +324,43 @@ Encrypts data using a password
 
 Decrypts data using the original password and stored parameters
 
-**Parameters:**
+### `secureLocalStorage`
 
-- `encryptedData`: Base64-encoded ciphertext
-- `password`: Original encryption password
-- `iv`: Base64-encoded initialization vector
-- `salt`: Base64-encoded salt
+Secure wrapper around `localStorage` with async encryption/decryption.
 
-**Returns:** Promise resolving to the decrypted string
+- `await secureLocalStorage.setItem(key: string, value: unknown)`
+- `await secureLocalStorage.getItem(key: string): Promise<string | null>`
+- `secureLocalStorage.removeItem(key: string)`
+- `secureLocalStorage.clear()`
 
-### `generateSalt()`
+### `initializeSecureStorage(password: string)`
 
-Generates a cryptographically secure salt
+Initializes secure storage. Must be called once (e.g., at app startup).
 
-**Returns:** `ArrayBuffer` containing salt
+### `isSecureStorageInitialized()`
 
-### `deriveKey(password: string, salt: ArrayBuffer | Uint8Array, usages: KeyUsage[])`
+Checks if secure storage has been initialized.
 
-Derives a cryptographic key from a password
-
-**Parameters:**
-
-- `password`: Password to derive key from
-- `salt`: Salt value
-- `usages`: Array of key usages (e.g., ['encrypt'], ['decrypt'])
-
-**Returns:** Promise resolving to `CryptoKey`
+---
 
 ## Error Handling
 
 The library throws specific error types for cryptographic operations:
 
-- `EncryptionError`: Failed to encrypt data
-- `DecryptionError`: Failed to decrypt data (invalid password or corrupted data)
+- `EncryptionError`
+- `DecryptionError`
 
 ```javascript
 try {
-  const decrypted = await decrypt(encryptedData, password, iv, salt);
+  const decrypted = await secureLocalStorage.getItem('someKey');
 } catch (error) {
   if (error instanceof DecryptionError) {
     console.error('Decryption failed - check your password');
-  } else {
-    console.error('Unexpected error:', error);
   }
 }
 ```
+
+---
 
 ## Security Notes
 
@@ -250,16 +419,16 @@ We're actively working to enhance bVault-js with these planned features:
 - [ ] **Stream Processing**: Support for large file encryption through stream processing
 - [ ] **Web Worker Support**: Offload crypto operations to background threads
 - [ ] **Enhanced Security**:
-  - [ ] Add authenticated data support (AAD) for AES-GCM
-  - [ ] Implement configurable iteration counts
-  - [ ] Add key derivation memory hardening (Argon2 support)
+    - [ ] Add authenticated data support (AAD) for AES-GCM
+    - [ ] Implement configurable iteration counts
+    - [ ] Add key derivation memory hardening (Argon2 support)
 - [ ] **Extended Environments**:
-  - [ ] React Native compatibility
-  - [ ] Service worker support
+    - [ ] React Native compatibility
+    - [ ] Service worker support
 - [ ] **Developer Experience**:
-  - [ ] Additional error diagnostics
-  - [ ] Password strength meter integration
-  - [ ] TypeScript type enhancements
+    - [ ] Additional error diagnostics
+    - [ ] Password strength meter integration
+    - [ ] TypeScript type enhancements
 
 ## When to Consider Alternatives
 

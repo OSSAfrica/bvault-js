@@ -4,7 +4,7 @@ import BVaultDB from './bvault-db.js';
 import { decrypt, encrypt } from './crypto.js';
 import { DecryptionError } from './errors.js';
 
-const METADATA_STORE = 'encryption_metadata';
+const METADATA_STORE = 'l_encryption_metadata';
 let isInitialized = false;
 let encryptionPassword = '';
 
