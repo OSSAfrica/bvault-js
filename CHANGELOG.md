@@ -1,5 +1,11 @@
 # bvault-js
 
+## 0.3.2
+
+### Patch Changes
+
+- d1bacfd: Docs update and badge removal
+
 ## 0.3.1
 
 ### Patch Changes
