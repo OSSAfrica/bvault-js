@@ -1,6 +1,6 @@
 {
   "name": "bvault-js",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "type": "module",
   "description": "A frontend cryptographic library for encrypting and decrypting data in the browser",
   "main": "dist/index.js",

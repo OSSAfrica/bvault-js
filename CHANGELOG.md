@@ -1,5 +1,11 @@
 # bvault-js
 
+## 0.2.3
+
+### Patch Changes
+
+- 9e98fbf: Update secure storage apis
+
 ## 0.2.2
 
 ### Patch Changes
