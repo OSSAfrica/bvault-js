@@ -16,7 +16,8 @@
     "prepublishOnly": "npm run ci",
     "test": "vitest",
     "test:run": "vitest run",
-    "ci": "npm run build && npm run check-format && npm run test:run"
+    "ci": "npm run build && npm run check-format && npm run test:run",
+    "bundle": "esbuild dist/index.js --bundle --minify --outfile=dist/bvault.min.js"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.5",

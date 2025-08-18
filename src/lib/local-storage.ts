@@ -7,11 +7,15 @@ import { DecryptionError } from './errors.js';
 const METADATA_STORE = 'encryption_metadata';
 let isInitialized = false;
 let encryptionPassword = '';
+
+// Cache to speed up lookups (in-memory, lost after reload)
 const encryptionMetadataCache = new Map<string, { iv: string; salt: string }>();
-let originalSetItem = localStorage.setItem;
-let originalGetItem = localStorage.getItem;
-let originalRemoveItem = localStorage.removeItem;
-let originalClear = localStorage.clear;
+
+// Preserve original localStorage methods
+const originalSetItem = localStorage.setItem;
+const originalGetItem = localStorage.getItem;
+const originalRemoveItem = localStorage.removeItem;
+const originalClear = localStorage.clear;
 
 /**
  * Initializes secure storage by setting up the encryption password and verifying
@@ -29,7 +33,7 @@ export const initializeSecureStorage = async (
   if (isInitialized) return;
 
   if (!password) {
-    throw new Error('Invalid encryption password');
+    throw new Error('Provide a password to initialize secure storage.');
   }
 
   encryptionPassword = password;
@@ -66,9 +70,7 @@ async function testDatabaseConnection(): Promise<void> {
       METADATA_STORE,
       testKey,
     );
-    if (!result) {
-      throw new Error('Failed to verify database connection');
-    }
+    if (!result) throw new Error('Failed to verify database connection');
     await BVaultDB.deleteData(METADATA_STORE, testKey);
   } catch (error) {
     await BVaultDB.deleteData(METADATA_STORE, testKey).catch(() => {});
@@ -79,8 +81,7 @@ async function testDatabaseConnection(): Promise<void> {
 /**
  * Converts a value to a string representation.
  *
- * If the value is an object, it is serialized to a JSON string. If it is a
- * primitive value, it is converted to a string using the `String()` function.
+ * Objects → JSON, primitives → String().
  *
  * @param {unknown} value - The value to convert
  * @returns {string} A string representation of the value
@@ -93,7 +94,12 @@ const processValue = (value: unknown): string => {
 };
 
 /**
- * Stores encrypted data in localStorage and metadata in IndexedDB
+ * Stores encrypted data in localStorage and metadata in IndexedDB.
+ * Also updates the in-memory metadata cache.
+ *
+ * @param {string} key - The key under which the value is stored.
+ * @param {unknown} value - The value to store.
+ * @returns {Promise<void>}
  */
 const secureSetItem = async (key: string, value: unknown): Promise<void> => {
   if (!isInitialized) {
@@ -119,13 +125,14 @@ const secureSetItem = async (key: string, value: unknown): Promise<void> => {
 
 /**
  * Retrieves a decrypted value from secure storage.
+ * Uses in-memory cache first; falls back to IndexedDB if cache is empty.
  *
  * @throws {Error} if secure storage is not initialized
  * @throws {DecryptionError} if decryption fails
- * @throws {Error} if data retrieval fails
+ * @throws {Error} if metadata is missing
  *
- * @param {string} key
- * @returns {Promise<string | null>}
+ * @param {string} key - The key to retrieve.
+ * @returns {Promise<string | null>} The decrypted value or null if not found.
  */
 const secureGetItem = async (key: string): Promise<string | null> => {
   if (!isInitialized) {
@@ -138,9 +145,17 @@ const secureGetItem = async (key: string): Promise<string | null> => {
   if (!encryptedValue) return null;
 
   try {
-    const metadata = encryptionMetadataCache.get(key);
+    let metadata = encryptionMetadataCache.get(key);
+
+    // Fallback to IndexedDB if the cache is empty (e.g., after reload)
     if (!metadata) {
-      throw new Error(`No encryption metadata found for key "${key}"`);
+      metadata = await BVaultDB.getData<{ iv: string; salt: string }>(
+        METADATA_STORE,
+        key,
+      );
+      if (!metadata)
+        throw new Error(`No encryption metadata found for key "${key}"`);
+      encryptionMetadataCache.set(key, metadata);
     }
 
     return await decrypt(
@@ -156,6 +171,7 @@ const secureGetItem = async (key: string): Promise<string | null> => {
       console.error(`Data retrieval failed for key "${key}":`, error);
     }
 
+    // Cleanup corrupted data
     originalRemoveItem.call(localStorage, key);
     encryptionMetadataCache.delete(key);
     BVaultDB.deleteData(METADATA_STORE, key).catch(console.error);
@@ -167,9 +183,7 @@ const secureGetItem = async (key: string): Promise<string | null> => {
 /**
  * Removes a key from secure storage and its associated encryption metadata.
  *
- * @throws {Error} if data removal fails
- *
- * @param {string} key
+ * @param {string} key - The key to remove.
  * @returns {void}
  */
 const secureRemoveItem = (key: string): void => {
@@ -181,8 +195,6 @@ const secureRemoveItem = (key: string): void => {
 /**
  * Removes all items from secure storage and clears associated encryption metadata.
  *
- * @throws {Error} if data removal fails
- *
  * @returns {void}
  */
 const secureClear = (): void => {
@@ -191,6 +203,9 @@ const secureClear = (): void => {
   BVaultDB.clearStore(METADATA_STORE).catch(console.error);
 };
 
+/**
+ * Public API for secure localStorage replacement.
+ */
 export const secureLocalStorage = {
   setItem: secureSetItem,
   getItem: secureGetItem,
@@ -201,6 +216,6 @@ export const secureLocalStorage = {
 /**
  * Checks whether secure storage has been initialized with a password.
  *
- * @returns {boolean} true if secure storage is initialized, false otherwise
+ * @returns {boolean} true if secure storage is initialized, false otherwise.
  */
 export const isSecureStorageInitialized = (): boolean => isInitialized;
