@@ -1,0 +1,273 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  background: #0a0a0a;
+  color: #e0e0e0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  padding: 0;
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+h1 {
+  font-size: 32px;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.subtitle {
+  text-align: center;
+  color: #555;
+  font-size: 13px;
+  margin-bottom: 28px;
+}
+
+h2 {
+  font-size: 18px;
+  margin: 0;
+  color: #aaa;
+}
+
+/* Card header: title + toggle side by side */
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* Engine toggle (inline, compact) */
+.engine-toggle {
+  display: flex;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.engine-toggle button {
+  padding: 8px 16px;
+  background: #1a1a2e;
+  color: #888;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.engine-toggle button.active {
+  background: #2563eb;
+  color: white;
+}
+
+.engine-toggle button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Engine badge on encrypted output */
+.engine-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #1e3a5f;
+  color: #60a5fa;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* Interop indicator */
+.interop-badge {
+  background: #1a1a3e;
+  border: 1px solid #3b3b8f;
+  color: #a78bfa;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+/* Cards */
+.card {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.encrypted-card {
+  border-color: #334155;
+  background: #0d1117;
+  position: relative;
+}
+
+/* Inputs */
+input, textarea {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #333;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 16px;
+  margin-bottom: 14px;
+  resize: vertical;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #555;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+/* Action buttons */
+.action-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.lock-btn {
+  background: #2563eb;
+  color: white;
+}
+
+.lock-btn:hover {
+  background: #1d4ed8;
+}
+
+.unlock-btn {
+  background: #7c3aed;
+  color: white;
+}
+
+.unlock-btn:hover {
+  background: #6d28d9;
+}
+
+.action-btn:disabled {
+  background: #333;
+  color: #666;
+  cursor: not-allowed;
+}
+
+/* Cipher output */
+.cipher-text {
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 14px;
+  background: #0a0a16;
+  border-radius: 8px;
+  color: #64748b;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.time {
+  float: right;
+  font-size: 12px;
+  color: #facc15;
+}
+
+/* Results */
+.result {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  position: relative;
+}
+
+.result.success {
+  background: #052e16;
+  border: 1px solid #166534;
+}
+
+.result.error {
+  background: #2a1a1a;
+  border: 1px solid #7f1d1d;
+}
+
+.result-label {
+  font-size: 12px;
+  color: #86efac;
+  margin-bottom: 6px;
+}
+
+.result.success .result-value {
+  color: #4ade80;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.result.error .result-value {
+  color: #f87171;
+  font-size: 14px;
+}
+
+@media (max-width: 600px) {
+  .container {
+    padding: 20px 14px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .engine-toggle {
+    width: 100%;
+  }
+
+  .engine-toggle button {
+    flex: 1;
+  }
+
+  .cipher-text {
+    font-size: 11px;
+  }
+
+  .meta {
+    font-size: 11px;
+  }
+}
