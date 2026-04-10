@@ -29,6 +29,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@1d96c772d19495a3b5c517cd2bc0cb401ea0529f # v4.1.2
 
+      - name: DCO Check
+        uses: lcarva/dco-check@8943647f5d6a89c89420b925b6826649f87c95e1 # v3.2.0
+
       - name: Dependency Review
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@5a1334812a6f272e276274ee7ed8dfa97576571a # v4.3.2
