@@ -80,10 +80,10 @@ describeWasm('WASM Crypto Interoperability', () => {
 
     it('should encrypt and decrypt Unicode and emoji', () => {
       const text = 'Hello 世界! 👋🔐 café résumé';
-      const result = wasmModule.encrypt_sync(text, 'p@$$w0rd');
+      const result = wasmModule.encrypt_sync(text, 'test-password-2');
       const decrypted = wasmModule.decrypt_sync(
         result.encryptedData,
-        'p@$$w0rd',
+        'test-password-2',
         result.iv,
         result.salt,
       );

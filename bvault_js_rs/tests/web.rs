@@ -20,7 +20,7 @@ fn get_field(obj: &JsValue, field: &str) -> String {
 #[wasm_bindgen_test]
 fn round_trip_basic() {
     let plaintext = "Hello, bvault!";
-    let password = "strongpassword123";
+    let password = "test-password-1";
 
     let result = encrypt_sync(plaintext, password).unwrap();
     let encrypted_data = get_field(&result, "encryptedData");
@@ -48,7 +48,7 @@ fn round_trip_empty_string() {
 #[wasm_bindgen_test]
 fn round_trip_unicode_and_emoji() {
     let plaintext = "Hello 世界! 👋🔐 café résumé";
-    let password = "p@$$w0rd!";
+    let password = "test-password-2";
 
     let result = encrypt_sync(plaintext, password).unwrap();
     let encrypted_data = get_field(&result, "encryptedData");
@@ -62,7 +62,7 @@ fn round_trip_unicode_and_emoji() {
 #[wasm_bindgen_test]
 fn wrong_password_fails() {
     let plaintext = "secret data";
-    let password = "correct_password";
+    let password = "test-password-3";
 
     let result = encrypt_sync(plaintext, password).unwrap();
     let encrypted_data = get_field(&result, "encryptedData");
