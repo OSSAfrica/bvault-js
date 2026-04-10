@@ -1,8 +1,8 @@
 [package]
 name = "bvault_js_rs"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Aaron Will Djaba <papiliocurtis@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -11,29 +11,19 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-wasm-bindgen = "0.2.63"
-
-# The `console_error_panic_hook` crate provides better debugging of panics by
-# logging them with `console.error`. This is great for development but requires
-# all the `std::fmt` and `std::panicking` infrastructure, so it isn't great for
-# code size when deploying.
+wasm-bindgen = "0.2"
 console_error_panic_hook = { version = "0.1.6", optional = true }
-
-# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
-# compared to the default allocator's ~10K. It is slower than the default
-# allocator, however.
-#
-# Unfortunately, `wee_alloc` requires nightly Rust when focusing on wasm for now.
-wee_alloc = { version = "0.4.5", optional = true }
-aes = "0.8.4"
-cbc = "0.1.2"
-pbkdf2 = "0.12.2"
-sha2 = "0.10.9"
-base64 = "0.22.1"
+aes-gcm = "0.10"
+pbkdf2 = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = { version = "0.2", features = ["js"] }
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
 
 [dev-dependencies]
-wasm-bindgen-test = "0.3.13"
+wasm-bindgen-test = "0.3"
+js-sys = "0.3"
 
 [profile.release]
-# Tell `rustc` to optimize for a small code size.
 opt-level = "s"
