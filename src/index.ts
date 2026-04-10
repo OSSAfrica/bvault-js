@@ -8,3 +8,4 @@ export {
   secureSessionStorage,
   initializeSecureStorage,
 } from './lib/secure-storage.js';
+export { encryptSync, decryptSync, initWasm } from './lib/crypto-wasm.js';
