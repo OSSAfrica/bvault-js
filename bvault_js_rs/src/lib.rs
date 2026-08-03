@@ -38,8 +38,8 @@ pub fn decrypt_sync(
         return Err(JsValue::from_str("IV must be 16 bytes"));
     }
 
-    // --- key derivation (PBKDF2-HMAC-SHA256, 100 000 iters) ------------------
-    let key = pbkdf2_hmac_array::<Sha256, 32>(password.as_bytes(), &salt, 100_000);
+    // --- key derivation (PBKDF2-HMAC-SHA256, 600 000 iters) ------------------
+    let key = pbkdf2_hmac_array::<Sha256, 32>(password.as_bytes(), &salt, 600_000);
 
     // --- decryption ----------------------------------------------------------
     let mut buf = ciphertext;
