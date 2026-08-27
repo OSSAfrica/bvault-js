@@ -1,12 +1,12 @@
 // test/crypto.test.ts
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  decrypt,
-  DecryptionError,
-  encrypt,
-  EncryptionError,
-} from '../src/index.js';
+  decryptWithKey,
+  encryptWithKey,
+  isCurrentFormat,
+} from '../src/lib/crypto.js';
+import { DecryptionError } from '../src/lib/errors.js';
 import {
   base64ToBuffer,
   bufferToBase64,
@@ -14,157 +14,132 @@ import {
   stringToBuffer,
 } from '../src/lib/converters.js';
 
-// Store original crypto for integration tests
-const originalCrypto = global.crypto;
+const makeKey = () =>
+  crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+    'encrypt',
+    'decrypt',
+  ]);
 
-// Mock Web Crypto API
-const mockCrypto = {
-  subtle: {
-    importKey: vi.fn(),
-    deriveKey: vi.fn(),
-    encrypt: vi.fn(),
-    decrypt: vi.fn(),
-  },
-  getRandomValues: vi.fn(),
-};
+describe('crypto', () => {
+  let key: CryptoKey;
 
-// Real implementation helper for integration tests
-async function withRealCrypto<T>(fn: () => Promise<T>): Promise<T> {
-  const current = global.crypto;
-  global.crypto = originalCrypto;
-  try {
-    return await fn();
-  } finally {
-    global.crypto = current;
-  }
-}
+  beforeEach(async () => {
+    key = await makeKey();
+  });
 
-describe('Encryption Library', () => {
-  describe('Unit Tests (Mocked)', () => {
-    beforeEach(() => {
-      global.crypto = mockCrypto as any;
-      vi.clearAllMocks();
-
-      // Reset to default implementations
-      mockCrypto.getRandomValues.mockImplementation((buffer) => {
-        const arr = new Uint8Array(buffer.byteLength);
-        for (let i = 0; i < arr.length; i++) {
-          arr[i] = Math.floor(Math.random() * 256);
-        }
-        return arr;
-      });
+  describe('round-trip', () => {
+    it('encrypts and decrypts a value', async () => {
+      const payload = await encryptWithKey('secret data', key);
+      expect(await decryptWithKey(payload, key)).toBe('secret data');
     });
 
-    it('should throw EncryptionError on failure', async () => {
-      // Mock encryption failure
-      mockCrypto.subtle.encrypt.mockRejectedValueOnce(
-        new Error('Encryption failed'),
-      );
-
-      await expect(encrypt('data', 'pass')).rejects.toThrow(EncryptionError);
+    it('preserves multi-byte characters', async () => {
+      const text = 'Hello 世界! 👋';
+      const payload = await encryptWithKey(text, key);
+      expect(await decryptWithKey(payload, key)).toBe(text);
     });
 
-    it('should throw DecryptionError on failure', async () => {
-      // Mock decryption failure
-      mockCrypto.subtle.decrypt.mockRejectedValueOnce(
-        new Error('Decryption failed'),
-      );
+    it('produces URL-safe base64', async () => {
+      const payload = await encryptWithKey('data', key);
+      expect(payload).toMatch(/^[A-Za-z0-9_-]+$/);
+    });
 
-      await expect(decrypt('encrypted', 'pass', 'iv', 'salt')).rejects.toThrow(
+    it('round-trips a 1MB value', async () => {
+      const large = 'x'.repeat(1024 * 1024);
+      const payload = await encryptWithKey(large, key);
+      expect(await decryptWithKey(payload, key)).toBe(large);
+    });
+  });
+
+  describe('payload format', () => {
+    it('stamps the current version byte', async () => {
+      const payload = await encryptWithKey('data', key);
+      expect(base64ToBuffer(payload)[0]).toBe(1);
+      expect(isCurrentFormat(payload)).toBe(true);
+    });
+
+    it('rejects a value with no version byte', () => {
+      expect(isCurrentFormat(bufferToBase64(new Uint8Array(40)))).toBe(false);
+    });
+
+    it('rejects an unsupported version', async () => {
+      const bytes = base64ToBuffer(await encryptWithKey('data', key));
+      bytes[0] = 99;
+      await expect(decryptWithKey(bufferToBase64(bytes), key)).rejects.toThrow(
+        DecryptionError,
+      );
+    });
+
+    it('rejects a payload too short to hold a header', async () => {
+      await expect(
+        decryptWithKey(bufferToBase64(new Uint8Array([1, 2, 3])), key),
+      ).rejects.toThrow(DecryptionError);
+    });
+  });
+
+  describe('authentication', () => {
+    it('rejects a tampered ciphertext', async () => {
+      const bytes = base64ToBuffer(await encryptWithKey('secret', key));
+      bytes[bytes.length - 1] ^= 0xff;
+      await expect(decryptWithKey(bufferToBase64(bytes), key)).rejects.toThrow(
+        DecryptionError,
+      );
+    });
+
+    it('rejects a tampered IV', async () => {
+      const bytes = base64ToBuffer(await encryptWithKey('secret', key));
+      bytes[1] ^= 0xff;
+      await expect(decryptWithKey(bufferToBase64(bytes), key)).rejects.toThrow(
+        DecryptionError,
+      );
+    });
+
+    it('rejects the wrong key', async () => {
+      const payload = await encryptWithKey('secret', key);
+      await expect(decryptWithKey(payload, await makeKey())).rejects.toThrow(
         DecryptionError,
       );
     });
   });
 
-  describe('Integration Tests (Real Crypto)', () => {
-    it('should encrypt data successfully', async () => {
-      const result = await withRealCrypto(async () => {
-        return await encrypt('secret data', 'password123');
-      });
-
-      expect(result).toEqual({
-        encryptedData: expect.any(String),
-        iv: expect.any(String),
-        salt: expect.any(String),
-      });
-
-      // Verify base64 format
-      expect(result.iv).toMatch(/^[A-Za-z0-9_-]+$/);
-      expect(result.salt).toMatch(/^[A-Za-z0-9_-]+$/);
-      expect(result.encryptedData).toMatch(/^[A-Za-z0-9_-]+$/);
-    });
-
-    it('should decrypt data successfully', async () => {
-      // Create encrypted data and decrypt it
-      const result = await withRealCrypto(async () => {
-        const encrypted = await encrypt('test message', 'pass123');
-        return await decrypt(
-          encrypted.encryptedData,
-          'pass123',
-          encrypted.iv,
-          encrypted.salt,
+  describe('IV uniqueness', () => {
+    it('uses a distinct IV for every write', async () => {
+      const seen = new Set<string>();
+      for (let i = 0; i < 10_000; i++) {
+        const iv = base64ToBuffer(await encryptWithKey('same', key)).subarray(
+          1,
+          13,
         );
-      });
-
-      expect(result).toBe('test message');
+        seen.add(bufferToBase64(iv));
+      }
+      expect(seen.size).toBe(10_000);
     });
 
-    it('should fail with wrong password', async () => {
-      await withRealCrypto(async () => {
-        const encrypted = await encrypt('test message', 'correct-pass');
-
-        await expect(
-          decrypt(
-            encrypted.encryptedData,
-            'wrong-pass',
-            encrypted.iv,
-            encrypted.salt,
-          ),
-        ).rejects.toThrow(DecryptionError);
-      });
-    });
-
-    it('should fail with tampered IV', async () => {
-      await withRealCrypto(async () => {
-        const encrypted = await encrypt('test message', 'pass');
-        const tamperedIV = bufferToBase64(new Uint8Array(12).buffer); // Zeroed IV
-
-        await expect(
-          decrypt(encrypted.encryptedData, 'pass', tamperedIV, encrypted.salt),
-        ).rejects.toThrow(DecryptionError);
-      });
+    it('produces different ciphertext for identical input', async () => {
+      const a = await encryptWithKey('same', key);
+      const b = await encryptWithKey('same', key);
+      expect(a).not.toBe(b);
     });
   });
 
-  describe('Data Conversion', () => {
-    it('should round-trip buffer/base64 conversion', () => {
-      const original = new Uint8Array([1, 2, 3, 4, 255, 0, 128]).buffer;
-      const base64 = bufferToBase64(original);
-      const roundTripped = new Uint8Array(base64ToBuffer(base64));
-
-      expect(roundTripped).toEqual(new Uint8Array([1, 2, 3, 4, 255, 0, 128]));
+  describe('converters', () => {
+    it('round-trips buffer/base64', () => {
+      const original = new Uint8Array([1, 2, 3, 4, 255, 0, 128]);
+      expect(base64ToBuffer(bufferToBase64(original))).toEqual(original);
     });
 
-    it('should handle special characters in text conversion', () => {
+    it('round-trips 1MB without overflowing the stack', () => {
+      // getRandomValues caps at 65,536 bytes per call, so fill in chunks.
+      const bytes = new Uint8Array(1024 * 1024);
+      for (let i = 0; i < bytes.length; i += 65_536) {
+        crypto.getRandomValues(bytes.subarray(i, i + 65_536));
+      }
+      expect(base64ToBuffer(bufferToBase64(bytes))).toEqual(bytes);
+    });
+
+    it('handles special characters in text conversion', () => {
       const text = 'Hello 世界! 👋';
-      const buffer = stringToBuffer(text);
-      const result = bufferToString(buffer);
-
-      expect(result).toBe(text);
-    });
-  });
-
-  describe('Error Handling', () => {
-    it('should throw EncryptionError with custom message', () => {
-      const error = new EncryptionError('Custom message');
-      expect(error.message).toBe('Custom message');
-      expect(error).toBeInstanceOf(Error);
-    });
-
-    it('should throw DecryptionError with custom message', () => {
-      const error = new DecryptionError('Invalid key');
-      expect(error.message).toBe('Invalid key');
-      expect(error).toBeInstanceOf(Error);
+      expect(bufferToString(stringToBuffer(text))).toBe(text);
     });
   });
 });

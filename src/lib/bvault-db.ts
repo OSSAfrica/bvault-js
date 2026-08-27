@@ -39,19 +39,18 @@ interface DatabaseSchema {
 
 /**
  * IndexedDB schema for BVault.
- * We keep separate object stores for local and session storage metadata
- * to avoid collisions and ensure proper cleanup.
+ *
+ * A single store holds the encryption key. Bumping the version drops the
+ * legacy `encryption_metadata_*` stores used by 0.x, whose per-item IV/salt
+ * records are obsolete now that both travel inline with the ciphertext.
  */
 const DB_SCHEMA: DatabaseSchema = {
-  version: 2, // bump version when schema changes
+  version: 3, // bump version when schema changes
   stores: [
     {
-      name: 'encryption_metadata_local',
-      options: { keyPath: 'key' },
-    },
-    {
-      name: 'encryption_metadata_session',
-      options: { keyPath: 'key' },
+      // Holds the non-extractable CryptoKey. Structured-clonable, so the key
+      // persists across sessions without its raw bytes ever reaching JavaScript.
+      name: 'keys',
     },
   ],
 };
@@ -75,6 +74,13 @@ const BVaultDB: BVaultDatabase = {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
+
+        // Drop stores that are no longer part of the schema. This clears the
+        // 0.x `encryption_metadata_*` stores on upgrade.
+        const wanted = new Set(DB_SCHEMA.stores.map((store) => store.name));
+        Array.from(db.objectStoreNames).forEach((name) => {
+          if (!wanted.has(name)) db.deleteObjectStore(name);
+        });
 
         // Create all defined stores
         DB_SCHEMA.stores.forEach((store) => {

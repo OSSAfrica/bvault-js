@@ -15,125 +15,111 @@ import { EncryptionError, DecryptionError } from './errors.js';
 const ALGORITHM = 'AES-GCM';
 
 /**
- * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey
- */
-const KEY_LENGTH = 256;
-
-/**
- * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey
- */
-const PBKDF2_ITERATIONS = 100000;
-
-/**
  * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt
  */
 const IV_LENGTH = 12; // 96 bits for AES-GCM
 
 /**
- * @see https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey
+ * Payload format marker. Values written by 0.x carry no version byte, which is
+ * how legacy data is recognised and cleared on initialization.
  */
-const SALT_LENGTH = 16;
+export const PAYLOAD_VERSION = 1;
 
 /**
- * Generates a random salt buffer.
- * @returns {ArrayBuffer} A random salt buffer
+ * Byte offset at which the ciphertext begins.
  */
-export const generateSalt = (): ArrayBuffer => {
-  return crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
-};
+const CIPHERTEXT_OFFSET = 1 + IV_LENGTH;
 
 /**
- * Derives a key from the password and salt using PBKDF2.
- * @param password
- * @param salt
- * @param usages
- * @returns {Promise<CryptoKey>}
- */
-export const deriveKey = async (
-  password: string,
-  salt: ArrayBuffer | Uint8Array,
-  usages: KeyUsage[],
-): Promise<CryptoKey> => {
-  const importedKey = await crypto.subtle.importKey(
-    'raw',
-    stringToBuffer(password),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  );
-
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt,
-      iterations: PBKDF2_ITERATIONS,
-      hash: 'SHA-256',
-    },
-    importedKey,
-    { name: ALGORITHM, length: KEY_LENGTH },
-    false,
-    usages,
-  );
-};
-
-/**
- * Encrypts data using AES-GCM.
+ * Encrypts data with a key, returning a self-describing payload.
+ *
+ * The layout is `version(1) || iv(12) || ciphertext+tag`, base64url-encoded.
+ * Carrying the IV inline is what keeps reads free of any IndexedDB lookup.
+ *
+ * A fresh IV is generated per call. The key is long-lived, and repeating an IV
+ * under one AES-GCM key is catastrophic, so the IV must never be derived from
+ * the storage key or reused.
+ *
  * @param data
- * @param password
- * @returns {Promise<{ encryptedData: string; iv: string; salt: string }>}
+ * @param key
+ * @returns {Promise<string>} base64url payload
  */
-
-export const encrypt = async (
+export const encryptWithKey = async (
   data: string,
-  password: string,
-): Promise<{ encryptedData: string; iv: string; salt: string }> => {
+  key: CryptoKey,
+): Promise<string> => {
   try {
-    const salt = generateSalt();
     const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-    const key = await deriveKey(password, salt, ['encrypt']);
 
-    const encrypted = await crypto.subtle.encrypt(
-      { name: ALGORITHM, iv },
-      key,
-      stringToBuffer(data),
+    const ciphertext = new Uint8Array(
+      await crypto.subtle.encrypt(
+        { name: ALGORITHM, iv },
+        key,
+        stringToBuffer(data),
+      ),
     );
 
-    return {
-      encryptedData: bufferToBase64(encrypted),
-      iv: bufferToBase64(iv),
-      salt: bufferToBase64(salt),
-    };
+    const payload = new Uint8Array(CIPHERTEXT_OFFSET + ciphertext.length);
+    payload[0] = PAYLOAD_VERSION;
+    payload.set(iv, 1);
+    payload.set(ciphertext, CIPHERTEXT_OFFSET);
+
+    return bufferToBase64(payload);
   } catch (error) {
-    throw new EncryptionError((error as Error).message);
+    throw new EncryptionError((error as Error).message, { cause: error });
   }
 };
 
 /**
- * Decrypts data using AES-GCM.
- * @param encryptedData
- * @param password
- * @param iv
- * @param salt
+ * Decrypts a payload produced by {@link encryptWithKey}.
+ *
+ * Throws if the payload is malformed, is not in the current format, or fails
+ * AES-GCM authentication — tampered ciphertext is rejected rather than
+ * returned as garbage.
+ *
+ * @param payload
+ * @param key
  * @returns {Promise<string>}
  */
-export const decrypt = async (
-  encryptedData: string,
-  password: string,
-  iv: string,
-  salt: string,
+export const decryptWithKey = async (
+  payload: string,
+  key: CryptoKey,
 ): Promise<string> => {
   try {
-    const saltBuffer = new Uint8Array(base64ToBuffer(salt));
-    const key = await deriveKey(password, saltBuffer, ['decrypt']);
+    const bytes = base64ToBuffer(payload);
+
+    if (bytes.length <= CIPHERTEXT_OFFSET) {
+      throw new Error('Payload is too short to contain a header');
+    }
+
+    if (bytes[0] !== PAYLOAD_VERSION) {
+      throw new Error(`Unsupported payload version: ${bytes[0]}`);
+    }
 
     const decrypted = await crypto.subtle.decrypt(
-      { name: ALGORITHM, iv: new Uint8Array(base64ToBuffer(iv)) },
+      { name: ALGORITHM, iv: bytes.subarray(1, CIPHERTEXT_OFFSET) },
       key,
-      new Uint8Array(base64ToBuffer(encryptedData)),
+      bytes.subarray(CIPHERTEXT_OFFSET),
     );
 
     return bufferToString(decrypted);
   } catch (error) {
-    throw new DecryptionError((error as Error).message);
+    throw new DecryptionError((error as Error).message, { cause: error });
+  }
+};
+
+/**
+ * Reports whether a stored value carries the current payload format.
+ * Used to identify 0.x values so they can be cleared.
+ *
+ * @param payload
+ * @returns {boolean}
+ */
+export const isCurrentFormat = (payload: string): boolean => {
+  try {
+    const bytes = base64ToBuffer(payload);
+    return bytes.length > CIPHERTEXT_OFFSET && bytes[0] === PAYLOAD_VERSION;
+  } catch {
+    return false;
   }
 };

@@ -1,68 +1,73 @@
 // src/lib/secure-storage.ts
 import BVaultDB from './bvault-db.js';
-import { decrypt, encrypt } from './crypto.js';
+import { decryptWithKey, encryptWithKey } from './crypto.js';
 import { EncryptionError, DecryptionError } from './errors.js';
+import { getOrCreateKey, destroyKey, resetKeyCache } from './keystore.js';
+import { clearLegacyData } from './migration.js';
 
 let isInitialized = false;
-let encryptionPassword = '';
+let storageKey: CryptoKey | null = null;
+let keyLossReported = false;
 
 /**
- * Metadata stores to keep local/session IV+salt separated in IndexedDB.
+ * Prefix applied to every key bVault writes.
+ *
+ * Values live in the same namespace as the rest of the application's storage,
+ * so the prefix keeps bVault from colliding with — or clearing — data written
+ * by other code.
  */
-const LOCAL_METADATA_STORE = 'encryption_metadata_local';
-const SESSION_METADATA_STORE = 'encryption_metadata_session';
+const KEY_PREFIX = 'bv1:';
 
 /**
- * In-memory caches for IV + salt metadata (to avoid IndexedDB lookups every time).
+ * Returns the requested Storage object, or throws a useful error when the
+ * module is loaded outside a browser.
+ *
+ * Read lazily: touching `localStorage` at module scope makes importing
+ * bvault-js throw during server-side rendering.
  */
-const localMetadataCache = new Map<string, { iv: string; salt: string }>();
-const sessionMetadataCache = new Map<string, { iv: string; salt: string }>();
+const getStorage = (target: 'local' | 'session'): Storage => {
+  const storage =
+    typeof globalThis !== 'undefined'
+      ? target === 'local'
+        ? globalThis.localStorage
+        : globalThis.sessionStorage
+      : undefined;
 
-/**
- * Preserve the original Storage methods so they can still be used internally.
- */
-const originalLocal = {
-  setItem: localStorage.setItem,
-  getItem: localStorage.getItem,
-  removeItem: localStorage.removeItem,
-  clear: localStorage.clear,
+  if (!storage) {
+    throw new Error(
+      `${target}Storage is unavailable. bvault-js requires a browser environment.`,
+    );
+  }
+
+  return storage;
 };
 
-const originalSession = {
-  setItem: sessionStorage.setItem,
-  getItem: sessionStorage.getItem,
-  removeItem: sessionStorage.removeItem,
-  clear: sessionStorage.clear,
-};
-
 /**
- * Initializes secure storage by setting up the encryption password and verifying
- * the database connection. This must be called once before using secure storage functions.
+ * Initializes secure storage.
+ *
+ * Loads the encryption key for this origin, generating one on first use, and
+ * clears any data left by v0.x. Must be called once before the storage
+ * wrappers are used.
+ *
+ * The key is generated non-extractable: its raw bytes are never exposed to
+ * JavaScript, so it cannot be copied out of the browser and used elsewhere.
  *
  * @example
  * ```ts
- * await initializeSecureStorage('myStrongPassword');
+ * await initializeSecureStorage();
  * await secureLocalStorage.setItem('user', { id: 1, name: 'Alice' });
  * ```
  *
- * @param {string} password - The encryption password used for securing storage.
  * @returns {Promise<void>}
- * @throws {Error} If initialization fails or no password is provided.
+ * @throws {Error} If the key cannot be loaded or generated.
  */
-export const initializeSecureStorage = async (
-  password: string,
-): Promise<void> => {
+export const initializeSecureStorage = async (): Promise<void> => {
   if (isInitialized) return;
-  if (!password) {
-    throw new Error('Provide a password to initialize secure storage.');
-  }
-
-  encryptionPassword = password;
 
   try {
+    await clearLegacyData();
     await BVaultDB.initialize();
-    await testDatabaseConnection(LOCAL_METADATA_STORE);
-    await testDatabaseConnection(SESSION_METADATA_STORE);
+    storageKey = await getOrCreateKey();
     isInitialized = true;
   } catch (error) {
     const caughtError = error as Error;
@@ -74,27 +79,16 @@ export const initializeSecureStorage = async (
 };
 
 /**
- * Tests the connection to the IndexedDB database by writing/deleting a test record.
- *
- * @param {string} store - The name of the metadata store to test.
+ * Returns the active key, or throws if the library has not been initialized.
  */
-async function testDatabaseConnection(store: string): Promise<void> {
-  const testKey = `__connection_test_${store}__`;
-  const testValue = { iv: 'test', salt: 'test' };
-  try {
-    await BVaultDB.storeData(store, { key: testKey, ...testValue });
-    const result = await BVaultDB.getData<{ iv: string; salt: string }>(
-      store,
-      testKey,
+const requireKey = (): CryptoKey => {
+  if (!isInitialized || !storageKey) {
+    throw new Error(
+      'Secure storage not initialized. Call initializeSecureStorage() first.',
     );
-    if (!result)
-      throw new Error(`Failed to verify database connection for ${store}`);
-    await BVaultDB.deleteData(store, testKey);
-  } catch (error) {
-    await BVaultDB.deleteData(store, testKey).catch(() => {});
-    throw error;
   }
-}
+  return storageKey;
+};
 
 /**
  * Converts a value to a string representation before encryption.
@@ -107,42 +101,37 @@ const processValue = (value: unknown): string => {
   return String(value);
 };
 
-// ---------- Generic creators so we don’t duplicate logic ----------
+/**
+ * Warns once when the key has gone but ciphertext remains, which happens when
+ * site data is cleared or the browser evicts IndexedDB. Every stored value is
+ * unreadable at that point; nothing is deleted, so the caller can decide.
+ */
+const reportPossibleKeyLoss = async (): Promise<void> => {
+  if (keyLossReported) return;
+  keyLossReported = true;
+  console.warn(
+    'bvault-js: stored values could not be decrypted. The encryption key may ' +
+      'have been evicted or cleared, which makes previously stored data ' +
+      'permanently unreadable. Stored values have been left untouched.',
+  );
+};
+
+// ---------- Generic creators so we don't duplicate logic ----------
 
 /**
  * Creates a secure setItem wrapper.
  */
-function createSecureSetItem(
-  storage: typeof localStorage | typeof sessionStorage,
-  originalSet: typeof localStorage.setItem | typeof sessionStorage.setItem,
-  cache: Map<string, { iv: string; salt: string }>,
-  store: string,
-) {
+function createSecureSetItem(target: 'local' | 'session') {
   return async (key: string, value: unknown): Promise<void> => {
-    if (!isInitialized) {
-      throw new Error(
-        'Secure storage not initialized. Call initializeSecureStorage() first.',
-      );
-    }
+    const cryptoKey = requireKey();
 
     try {
-      const processedValue = processValue(value);
-      const encryptionResult = await encrypt(
-        processedValue,
-        encryptionPassword,
-      );
-
-      // Store encrypted value
-      originalSet.call(storage, key, encryptionResult.encryptedData);
-
-      // Cache and persist IV + salt
-      const metadata = { iv: encryptionResult.iv, salt: encryptionResult.salt };
-      cache.set(key, metadata);
-      await BVaultDB.storeData(store, { key, ...metadata });
+      const payload = await encryptWithKey(processValue(value), cryptoKey);
+      getStorage(target).setItem(KEY_PREFIX + key, payload);
     } catch (error) {
       throw new EncryptionError(`Failed to encrypt and store key "${key}"`, {
         cause: error,
-        context: { store, key },
+        context: { target, key },
       });
     }
   };
@@ -150,58 +139,27 @@ function createSecureSetItem(
 
 /**
  * Creates a secure getItem wrapper.
+ *
+ * Returns `null` when a value cannot be decrypted. The stored value is never
+ * removed on failure: a transient error or a missing key would otherwise
+ * destroy data the caller may still be able to recover.
  */
-function createSecureGetItem(
-  storage: typeof localStorage | typeof sessionStorage,
-  originalGet: typeof localStorage.getItem | typeof sessionStorage.getItem,
-  originalRemove: typeof localStorage.removeItem,
-  cache: Map<string, { iv: string; salt: string }>,
-  store: string,
-) {
+function createSecureGetItem(target: 'local' | 'session') {
   return async (key: string): Promise<string | null> => {
-    if (!isInitialized) {
-      throw new Error(
-        'Secure storage not initialized. Call initializeSecureStorage() first.',
-      );
-    }
+    const cryptoKey = requireKey();
 
-    const encryptedValue = originalGet.call(storage, key);
-
-    if (!encryptedValue) return null;
+    const payload = getStorage(target).getItem(KEY_PREFIX + key);
+    if (payload === null) return null;
 
     try {
-      let metadata = cache.get(key);
-      if (!metadata) {
-        metadata = await BVaultDB.getData<{ iv: string; salt: string }>(
-          store,
-          key,
-        );
-        if (!metadata) {
-          throw new DecryptionError('Missing encryption metadata', {
-            context: { store, key },
-          });
-        }
-        cache.set(key, metadata);
-      }
-
-      return await decrypt(
-        encryptedValue,
-        encryptionPassword,
-        metadata.iv,
-        metadata.salt,
-      );
+      return await decryptWithKey(payload, cryptoKey);
     } catch (error) {
       if (error instanceof DecryptionError) {
         console.error(`Decryption failed for key "${key}":`, error.message);
+        await reportPossibleKeyLoss();
       } else {
         console.error(`Data retrieval failed for key "${key}":`, error);
       }
-
-      // Clean up corrupted data
-      originalRemove.call(storage, key);
-      cache.delete(key);
-      BVaultDB.deleteData(store, key).catch(console.error);
-
       return null;
     }
   };
@@ -210,101 +168,54 @@ function createSecureGetItem(
 /**
  * Creates a secure removeItem wrapper.
  */
-function createSecureRemoveItem(
-  storage: typeof localStorage | typeof sessionStorage,
-  originalRemove:
-    | typeof localStorage.removeItem
-    | typeof sessionStorage.removeItem,
-  cache: Map<string, { iv: string; salt: string }>,
-  store: string,
-) {
+function createSecureRemoveItem(target: 'local' | 'session') {
   return (key: string): void => {
-    originalRemove.call(storage, key);
-    cache.delete(key);
-    BVaultDB.deleteData(store, key).catch(console.error);
+    getStorage(target).removeItem(KEY_PREFIX + key);
   };
 }
 
 /**
  * Creates a secure clear wrapper.
+ *
+ * Removes only bVault's own entries, leaving the rest of the application's
+ * storage alone.
  */
-function createSecureClear(
-  storage: typeof localStorage | typeof sessionStorage,
-  originalClear: typeof localStorage.clear | typeof sessionStorage.clear,
-  cache: Map<string, { iv: string; salt: string }>,
-  store: string,
-) {
+function createSecureClear(target: 'local' | 'session') {
   return (): void => {
-    originalClear.call(storage);
-    cache.clear();
-    BVaultDB.clearStore(store).catch(console.error);
+    const storage = getStorage(target);
+    const owned: string[] = [];
+
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (key?.startsWith(KEY_PREFIX)) owned.push(key);
+    }
+
+    owned.forEach((key) => storage.removeItem(key));
   };
 }
 
 // ---------- LocalStorage Secure Wrapper ----------
 /**
  * Secure wrapper around `localStorage`.
- * Automatically encrypts/decrypts values and manages IV + salt in IndexedDB.
+ * Values are encrypted with a key that cannot be exported from the browser.
  */
 export const secureLocalStorage = {
-  setItem: createSecureSetItem(
-    localStorage,
-    originalLocal.setItem,
-    localMetadataCache,
-    LOCAL_METADATA_STORE,
-  ),
-  getItem: createSecureGetItem(
-    localStorage,
-    originalLocal.getItem,
-    originalLocal.removeItem,
-    localMetadataCache,
-    LOCAL_METADATA_STORE,
-  ),
-  removeItem: createSecureRemoveItem(
-    localStorage,
-    originalLocal.removeItem,
-    localMetadataCache,
-    LOCAL_METADATA_STORE,
-  ),
-  clear: createSecureClear(
-    localStorage,
-    originalLocal.clear,
-    localMetadataCache,
-    LOCAL_METADATA_STORE,
-  ),
+  setItem: createSecureSetItem('local'),
+  getItem: createSecureGetItem('local'),
+  removeItem: createSecureRemoveItem('local'),
+  clear: createSecureClear('local'),
 };
 
 // ---------- SessionStorage Secure Wrapper ----------
 /**
  * Secure wrapper around `sessionStorage`.
- * Automatically encrypts/decrypts values and manages IV + salt in IndexedDB.
+ * Values are encrypted with a key that cannot be exported from the browser.
  */
 export const secureSessionStorage = {
-  setItem: createSecureSetItem(
-    sessionStorage,
-    originalSession.setItem,
-    sessionMetadataCache,
-    SESSION_METADATA_STORE,
-  ),
-  getItem: createSecureGetItem(
-    sessionStorage,
-    originalSession.getItem,
-    originalSession.removeItem,
-    sessionMetadataCache,
-    SESSION_METADATA_STORE,
-  ),
-  removeItem: createSecureRemoveItem(
-    sessionStorage,
-    originalSession.removeItem,
-    sessionMetadataCache,
-    SESSION_METADATA_STORE,
-  ),
-  clear: createSecureClear(
-    sessionStorage,
-    originalSession.clear,
-    sessionMetadataCache,
-    SESSION_METADATA_STORE,
-  ),
+  setItem: createSecureSetItem('session'),
+  getItem: createSecureGetItem('session'),
+  removeItem: createSecureRemoveItem('session'),
+  clear: createSecureClear('session'),
 };
 
 /**
@@ -313,3 +224,33 @@ export const secureSessionStorage = {
  * @returns {boolean}
  */
 export const isSecureStorageInitialized = (): boolean => isInitialized;
+
+/**
+ * Deletes the encryption key and every value stored under it.
+ *
+ * Intended for logout or account switching. There is no recovery path — once
+ * the key is gone, any remaining ciphertext is permanently unreadable.
+ *
+ * @returns {Promise<void>}
+ */
+export const destroySecureStorage = async (): Promise<void> => {
+  secureLocalStorage.clear();
+  secureSessionStorage.clear();
+  await destroyKey();
+  storageKey = null;
+  isInitialized = false;
+  keyLossReported = false;
+};
+
+/**
+ * Resets in-memory state so the next initialization behaves like a fresh page
+ * load. Does not touch stored data or the persisted key.
+ *
+ * @internal
+ */
+export const resetSecureStorageState = (): void => {
+  isInitialized = false;
+  storageKey = null;
+  keyLossReported = false;
+  resetKeyCache();
+};

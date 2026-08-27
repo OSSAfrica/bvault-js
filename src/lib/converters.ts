@@ -1,31 +1,38 @@
 // src/lib/converters.ts
 
-// Text <-> ArrayBuffer conversion
 /**
- * Converts a string to an ArrayBuffer
- * @param str
- * @returns ArrayBuffer
+ * Chunk size used when converting bytes to a binary string.
+ * Kept well below the engine's argument limit so `String.fromCharCode`
+ * is never handed more arguments than it can accept.
  */
-export const stringToBuffer = (str: string): ArrayBuffer => {
+const CHUNK_SIZE = 0x2000; // 8 KiB
+
+// Text <-> Uint8Array conversion
+/**
+ * Converts a string to a UTF-8 byte array
+ * @param str
+ * @returns Uint8Array
+ */
+export const stringToBuffer = (str: string): Uint8Array => {
   return new TextEncoder().encode(str);
 };
 
 /**
- * Converts an ArrayBuffer to a string
+ * Converts a UTF-8 byte array to a string
  * @param buffer
  * @returns string
  */
-export const bufferToString = (buffer: ArrayBuffer): string => {
+export const bufferToString = (buffer: ArrayBuffer | Uint8Array): string => {
   return new TextDecoder().decode(buffer);
 };
 
 // Base64 URL-safe encoding
 /**
- * Converts a base64 string to an ArrayBuffer
+ * Converts a base64 (standard or URL-safe) string to a byte array
  * @param base64
- * @returns ArrayBuffer
+ * @returns Uint8Array
  */
-export const base64ToBuffer = (base64: string): ArrayBuffer => {
+export const base64ToBuffer = (base64: string): Uint8Array => {
   // Convert URL-safe base64 to standard base64
   let standardBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 
@@ -42,17 +49,26 @@ export const base64ToBuffer = (base64: string): ArrayBuffer => {
     bytes[i] = binaryString.charCodeAt(i);
   }
 
-  return bytes.buffer;
+  return bytes;
 };
 
 /**
- * Converts an ArrayBuffer to a base64 string
+ * Converts a byte array to a URL-safe base64 string.
+ *
+ * Bytes are converted in chunks; spreading the whole array into
+ * `String.fromCharCode` overflows the call stack on large payloads.
+ *
  * @param buffer
  * @returns string
  */
-export const bufferToBase64 = (buffer: ArrayBuffer): string => {
-  const bytes = new Uint8Array(buffer);
-  const binaryString = String.fromCharCode(...bytes);
+export const bufferToBase64 = (buffer: ArrayBuffer | Uint8Array): string => {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+
+  let binaryString = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binaryString += String.fromCharCode(...bytes.subarray(i, i + CHUNK_SIZE));
+  }
+
   return btoa(binaryString)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
