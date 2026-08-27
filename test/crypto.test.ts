@@ -14,6 +14,12 @@ import {
   stringToBuffer,
 } from '../src/lib/converters.js';
 
+/**
+ * Megabyte round-trips and the 10k-iteration IV check run for seconds on a
+ * developer machine and longer on CI, well past vitest's 5s default.
+ */
+const SLOW_TEST_TIMEOUT = 30_000;
+
 const makeKey = () =>
   crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
     'encrypt',
@@ -44,11 +50,15 @@ describe('crypto', () => {
       expect(payload).toMatch(/^[A-Za-z0-9_-]+$/);
     });
 
-    it('round-trips a 1MB value', async () => {
-      const large = 'x'.repeat(1024 * 1024);
-      const payload = await encryptWithKey(large, key);
-      expect(await decryptWithKey(payload, key)).toBe(large);
-    });
+    it(
+      'round-trips a 1MB value',
+      async () => {
+        const large = 'x'.repeat(1024 * 1024);
+        const payload = await encryptWithKey(large, key);
+        expect(await decryptWithKey(payload, key)).toBe(large);
+      },
+      SLOW_TEST_TIMEOUT,
+    );
   });
 
   describe('payload format', () => {
@@ -103,17 +113,21 @@ describe('crypto', () => {
   });
 
   describe('IV uniqueness', () => {
-    it('uses a distinct IV for every write', async () => {
-      const seen = new Set<string>();
-      for (let i = 0; i < 10_000; i++) {
-        const iv = base64ToBuffer(await encryptWithKey('same', key)).subarray(
-          1,
-          13,
-        );
-        seen.add(bufferToBase64(iv));
-      }
-      expect(seen.size).toBe(10_000);
-    });
+    it(
+      'uses a distinct IV for every write',
+      async () => {
+        const seen = new Set<string>();
+        for (let i = 0; i < 10_000; i++) {
+          const iv = base64ToBuffer(await encryptWithKey('same', key)).subarray(
+            1,
+            13,
+          );
+          seen.add(bufferToBase64(iv));
+        }
+        expect(seen.size).toBe(10_000);
+      },
+      SLOW_TEST_TIMEOUT,
+    );
 
     it('produces different ciphertext for identical input', async () => {
       const a = await encryptWithKey('same', key);
@@ -128,14 +142,18 @@ describe('crypto', () => {
       expect(base64ToBuffer(bufferToBase64(original))).toEqual(original);
     });
 
-    it('round-trips 1MB without overflowing the stack', () => {
-      // getRandomValues caps at 65,536 bytes per call, so fill in chunks.
-      const bytes = new Uint8Array(1024 * 1024);
-      for (let i = 0; i < bytes.length; i += 65_536) {
-        crypto.getRandomValues(bytes.subarray(i, i + 65_536));
-      }
-      expect(base64ToBuffer(bufferToBase64(bytes))).toEqual(bytes);
-    });
+    it(
+      'round-trips 1MB without overflowing the stack',
+      () => {
+        // getRandomValues caps at 65,536 bytes per call, so fill in chunks.
+        const bytes = new Uint8Array(1024 * 1024);
+        for (let i = 0; i < bytes.length; i += 65_536) {
+          crypto.getRandomValues(bytes.subarray(i, i + 65_536));
+        }
+        expect(base64ToBuffer(bufferToBase64(bytes))).toEqual(bytes);
+      },
+      SLOW_TEST_TIMEOUT,
+    );
 
     it('handles special characters in text conversion', () => {
       const text = 'Hello 世界! 👋';

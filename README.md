@@ -5,10 +5,13 @@
 [![NPM Type Definitions](https://img.shields.io/npm/types/bvault-js?logo=typescript)](https://img.shields.io/npm/types/bvault-js)
 [![GitHub License](https://img.shields.io/github/license/kurtiz/bvault-js)](https://github.com/kurtiz/bvault-js)
 
-bVault-js encrypts data in `localStorage` and `sessionStorage` with a key that **cannot be exported
-from the browser**. Applications routinely keep session tokens and personal data in browser storage,
-where anyone who can read that storage can copy it and replay it elsewhere. bVault-js is built to
-make that copy worthless.
+bVault-js encrypts data in `localStorage` and `sessionStorage` with a key that **JavaScript cannot
+export**. Applications routinely keep session tokens and personal data in browser storage, where any
+script that can read that storage can ship it elsewhere and replay it. bVault-js makes that copy
+worthless — the key will not serialize into it.
+
+Read [what this protects against](#what-this-protects-against) before adopting it. The guarantee is
+specific, and it does not cover an attacker with access to the browser profile on disk.
 
 - 🔒 AES-GCM 256-bit authenticated encryption
 - 🔑 Non-extractable `CryptoKey` — the key material is never visible to JavaScript
@@ -22,18 +25,38 @@ make that copy worthless.
 Be precise about this before adopting it. bVault-js narrows the blast radius of stolen storage; it is
 not a defence against an attacker who is already executing script on your page.
 
-| Attack                                                                    | Result           | Why                                               |
-| ------------------------------------------------------------------------- | ---------------- | ------------------------------------------------- |
-| Storage copied and replayed in another browser                            | **Defeated**     | The key does not serialize into the dump          |
-| Passive exfiltration (`JSON.stringify(localStorage)`, extension scraping) | **Defeated**     | Yields ciphertext only                            |
-| Casual inspection via DevTools                                            | **Defeated**     | Nothing readable at rest                          |
-| Live XSS calling `subtle.decrypt()`                                       | **Not defeated** | Script in your origin can use the key handle      |
-| Whole-profile file copy                                                   | **Unverified**   | Browser and platform dependent — we make no claim |
+| Attack                                                                    | Result           | Why                                                           |
+| ------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------- |
+| Storage copied and replayed in another browser                            | **Defeated**     | The key does not serialize into the dump                      |
+| Passive exfiltration (`JSON.stringify(localStorage)`, extension scraping) | **Defeated**     | Yields ciphertext only                                        |
+| Casual inspection via DevTools                                            | **Defeated**     | Nothing readable at rest                                      |
+| Live XSS calling `subtle.decrypt()`                                       | **Not defeated** | Script in your origin can use the key handle                  |
+| Whole-profile file copy                                                   | **Not defeated** | Non-extractable is an API restriction, not encryption at rest |
 
 Injected script can _use_ the key while it runs on your page; it cannot _steal_ it for offline or
 cross-browser use. That turns permanent session compromise into access that ends when the script
 does. **bVault-js is not a substitute for preventing XSS**, and session tokens are still safest in
 `httpOnly` cookies, which JavaScript cannot read at all.
+
+### Non-extractable is not encryption at rest
+
+`extractable: false` stops JavaScript from reading the key bytes. It does **not** stop a native
+process that can read the browser profile directory.
+
+Firefox tracks ["CryptoKeys stored in IndexedDB should be cryptographically bound to
+profile"](https://bugzilla.mozilla.org/show_bug.cgi?id=1556794) as an open bug — they are not bound
+today. Chrome stores IndexedDB as LevelDB files that
+[forensics tooling reads routinely](https://www.browserforensics.app/en/blog/chrome-local-storage-and-indexeddb).
+Chrome's own position, [stated on the W3C WebCrypto
+list](https://lists.w3.org/Archives/Public/public-webcrypto/2012Dec/0018.html), is that
+non-extractable keys "are not meant to be a security primitive but purely for obfuscation".
+
+So bVault-js protects against an attacker who can read your storage **remotely** — via XSS, a
+malicious extension, or any script that ships data off the machine. It does not protect against one
+who has the profile files themselves. Closing that gap requires key material that never touches the
+profile, which means hardware-backed derivation such as the
+[WebAuthn PRF extension](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/); full-disk
+encryption is the other mitigation worth having.
 
 ## Installation
 
