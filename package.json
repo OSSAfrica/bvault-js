@@ -1,6 +1,6 @@
 {
   "name": "bvault-js",
-  "version": "0.3.2",
+  "version": "0.3.4",
   "type": "module",
   "description": "Encrypted browser storage backed by a key that cannot be exported from the browser",
   "main": "dist/index.js",
@@ -10,19 +10,22 @@
     "prepare": "npm run build",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "local-release": "changeset version && changeset publish",
     "prepublishOnly": "npm run ci",
     "test": "vitest",
     "test:run": "vitest run",
     "ci": "npm run build && npm run check-format && npm run test:run",
-    "bundle": "esbuild dist/index.js --bundle --minify --outfile=dist/bvault.min.js"
+    "bundle": "esbuild dist/index.js --bundle --minify --outfile=dist/bvault.min.js",
+    "release": "node scripts/tegami.mts",
+    "release:version": "node scripts/tegami.mts version",
+    "release:publish": "node scripts/tegami.mts publish",
+    "release:check": "node scripts/tegami.mts check-publish"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.5",
     "@types/node": "^24.0.15",
     "fake-indexeddb": "^6.0.1",
     "jsdom": "^26.1.0",
     "prettier": "^3.6.2",
+    "tegami": "^1.5.0",
     "terser": "^5.43.1",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
@@ -32,7 +35,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kurtiz/bvault-js.git"
+    "url": "git+https://github.com/OSSAfrica/bvault-js.git"
   },
   "keywords": [
     "crypto",
@@ -52,7 +55,7 @@
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/kurtiz/bvault-js/issues"
+    "url": "https://github.com/OSSAfrica/bvault-js/issues"
   },
-  "homepage": "https://github.com/kurtiz/bvault-js#readme"
+  "homepage": "https://github.com/OSSAfrica/bvault-js#readme"
 }

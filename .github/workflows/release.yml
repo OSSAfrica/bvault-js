@@ -1,0 +1,164 @@
+name: Release
+
+# One workflow, two states, decided by whether a publish is owed:
+#
+#   commit `fix:`/`feat:` lands on main
+#     -> no publish owed  -> `tegami version` bumps, writes .tegami/publish-lock.yaml,
+#                            and opens the version PR (auto-merged below)
+#   version PR merges
+#     -> publish owed     -> the publish job ships to npm, tags, and cuts the release
+#
+# The two are separate jobs so the `release` environment - and its required
+# reviewer - gates only the publish. Publishing is the one irreversible step
+# here; versioning and opening a PR are both revertable, and putting them behind
+# an approval would mean two manual approvals per release.
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Verify and version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      publish: ${{ steps.state.outputs.publish }}
+    env:
+      # The `secrets` context is not available in a step-level `if`. Referencing
+      # it there is a workflow syntax error rather than a falsy condition, and it
+      # fails the whole file at startup - including the branch filters, so the
+      # run fires on branches `on:` excludes. Job-level `env` may read secrets and
+      # step-level `if` may read `env`, so the guard goes through here.
+      RELEASE_APP_CLIENT_ID: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Tegami reads commits back to the latest tag, so a shallow clone would
+          # see no history and release nothing.
+          fetch-depth: 0
+
+      # Work the version PR as the GitHub App rather than as the built-in
+      # GITHUB_TOKEN. Anything GITHUB_TOKEN does is barred from triggering
+      # another workflow run, so a version PR it opened would get no CI, and a
+      # merge it performed would never start the publish job. An App token has
+      # no such restriction, which is what closes the loop.
+      #
+      # Skipped until the secrets exist; every step below then falls back to
+      # github.token and the release still runs, just needing a nudge to publish.
+      - name: Mint a GitHub App token
+        id: app-token
+        if: env.RELEASE_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Tegami requires Node 24+.
+          node-version: '24'
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Runs before either outcome, so a version PR is never opened from a broken
+      # tree and the publish job never starts from one.
+      - name: Verify
+        run: |
+          npm run build
+          npm run check-format
+          npm run test:run
+          npx --yes publint@latest
+          npx --yes @arethetypeswrong/cli@latest --pack . --profile node16
+
+      - name: Is a publish owed?
+        id: state
+        run: |
+          if npm run release:check --silent; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Version packages
+        if: steps.state.outputs.publish == 'false'
+        run: npm run release:version
+        env:
+          # Opening the PR as the App is what lets CI run on it, so the
+          # --auto merge below has real checks to wait for.
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+
+      # Turn on auto-merge for the version PR so a release needs no second click.
+      # Set the repository variable AUTO_MERGE_RELEASE to "false" to review every
+      # bump by hand instead.
+      - name: Enable auto-merge on the version PR
+        if: steps.state.outputs.publish == 'false' && vars.AUTO_MERGE_RELEASE != 'false'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+        run: |
+          pr=$(gh pr list --head tegami/version-packages --base "${GITHUB_REF_NAME}" \
+                 --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            echo "No open version PR; nothing to auto-merge."
+            exit 0
+          fi
+          # --auto waits for required checks when the repo has them; it errors if
+          # auto-merge is disabled in repo settings, in which case merge outright.
+          gh pr merge "$pr" --squash --auto || gh pr merge "$pr" --squash
+
+  publish:
+    name: Publish to npm
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    # Must match the environment name in the npm Trusted Publisher entry. The
+    # required reviewer on this environment pauses the run here, before anything
+    # reaches the registry.
+    environment: release
+    permissions:
+      contents: write
+      # Authenticates to npm by OIDC. There is no NPM_TOKEN.
+      id-token: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Trusted publishing needs Node >= 22.14.0; Tegami needs 24+. No
+          # registry-url: an .npmrc with a token would make npm authenticate with
+          # that token instead of the OIDC exchange.
+          node-version: '24'
+          cache: npm
+
+      # setup-node ships the npm bundled with Node; trusted publishing needs
+      # npm >= 11.5.1. Without this the publish falls back to token auth - and
+      # there is no token - so it fails at the last step.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish
+        run: npm run release:publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
