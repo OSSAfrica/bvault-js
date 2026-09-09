@@ -38,12 +38,12 @@ A major release is already owed. `.changeset/non-extractable-keys.md` declares a
 
 ## Decisions
 
-| Question | Decision |
-|---|---|
-| Release tooling | Migrate changesets → Tegami |
-| Toolchain | Keep npm (`npm ci`, `npm run`); Node 24+ |
-| Automation level | Full loop: GitHub App opens and auto-merges the version PR; publish gated on a `release` environment with a required reviewer |
-| `main` ruleset conflict | Add the release GitHub App to the ruleset's `bypass_actors` |
+| Question                | Decision                                                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Release tooling         | Migrate changesets → Tegami                                                                                                   |
+| Toolchain               | Keep npm (`npm ci`, `npm run`); Node 24+                                                                                      |
+| Automation level        | Full loop: GitHub App opens and auto-merges the version PR; publish gated on a `release` environment with a required reviewer |
+| `main` ruleset conflict | Add the release GitHub App to the ruleset's `bypass_actors`                                                                   |
 
 ### Why a GitHub App at all
 
@@ -139,11 +139,11 @@ package.json: version 0.3.2 -> 0.3.4
 Ported from `vedatrace-npm/scripts/tegami.mts`, run by plain `node` (Node 24
 strips types natively). Three deliberate differences:
 
-| Element | vedatrace | bvault-js | Reason |
-|---|---|---|---|
-| `PACKAGE_NAME` | `vedatrace` | `bvault-js` | |
-| `github({repo})` | `VedaTrace/vedatrace-npm` | `OSSAfrica/bvault-js` | |
-| `npm.updateLockFile` | `false` | default (`true`) | vedatrace disables it to stop a stray `package-lock.json` landing beside `bun.lock`. bvault-js *is* npm-locked, so refreshing the lockfile in the version PR is correct. |
+| Element              | vedatrace                 | bvault-js             | Reason                                                                                                                                                                   |
+| -------------------- | ------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PACKAGE_NAME`       | `vedatrace`               | `bvault-js`           |                                                                                                                                                                          |
+| `github({repo})`     | `VedaTrace/vedatrace-npm` | `OSSAfrica/bvault-js` |                                                                                                                                                                          |
+| `npm.updateLockFile` | `false`                   | default (`true`)      | vedatrace disables it to stop a stray `package-lock.json` landing beside `bun.lock`. bvault-js _is_ npm-locked, so refreshing the lockfile in the version PR is correct. |
 
 `npm.client` stays `"npm"` — trusted publishing is an npm CLI feature.
 
@@ -222,8 +222,8 @@ the "there are no publishing credentials" section.
 
 Steps 1–3 cannot be performed from this repo and are the user's to do.
 
-1. **GitHub App** — Repository permissions *Contents: Read and write* and
-   *Pull requests: Read and write*. Install it on `OSSAfrica/bvault-js`;
+1. **GitHub App** — Repository permissions _Contents: Read and write_ and
+   _Pull requests: Read and write_. Install it on `OSSAfrica/bvault-js`;
    creating it is not sufficient. Add secrets `RELEASE_APP_CLIENT_ID` (App
    settings → Client ID) and `RELEASE_APP_PRIVATE_KEY` (the generated `.pem`,
    pasted whole including the BEGIN/END lines).
@@ -261,7 +261,7 @@ any commit to main).
   settled by observing the first run rather than guessed at now.
 - **Conventional commits become load-bearing.** Existing history is mixed —
   `Increase PBKDF2 iterations from 100k to 600k` and `Potential fix for code
-  scanning alert no. 1` would release nothing. Going-forward concern only;
+scanning alert no. 1` would release nothing. Going-forward concern only;
   `.tegami/` entries override when commit messages understate impact.
 - **Tag placement.** `v0.3.4` at `1886cb1` asserts that everything before that
   commit shipped as 0.3.4. Since 0.3.4 was published by hand and never recorded
