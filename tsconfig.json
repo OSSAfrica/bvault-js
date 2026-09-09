@@ -10,6 +10,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "src/pkg"],
-  "exclude": ["node_modules", "dist", "test", "bvault_js_rs"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test"]
 }

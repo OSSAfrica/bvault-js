@@ -1,26 +1,62 @@
-# bVault-js - Secure Frontend Encryption Library
+# bVault-js — Encrypted Browser Storage
 
 [![npm version](https://img.shields.io/npm/v/bvault-js?logo=npm)](https://www.npmjs.com/package/bvault-js)
 [![wakatime](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c.svg)](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c)
 [![NPM Type Definitions](https://img.shields.io/npm/types/bvault-js?logo=typescript)](https://img.shields.io/npm/types/bvault-js)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/kurtiz/bvault-js)](https://img.shields.io/github/commit-activity/m/kurtiz/bvault-js)
 [![GitHub License](https://img.shields.io/github/license/kurtiz/bvault-js)](https://github.com/kurtiz/bvault-js)
 
-bVault-js is a type-safe, lightweight, zero-dependency cryptographic library for secure encryption and decryption in
-browser
-environments. It implements AES-GCM encryption with PBKDF2 key derivation, providing a simple API for data protection.
+bVault-js encrypts data in `localStorage` and `sessionStorage` with a key that **JavaScript cannot
+export**. Applications routinely keep session tokens and personal data in browser storage, where any
+script that can read that storage can ship it elsewhere and replay it. bVault-js makes that copy
+worthless — the key will not serialize into it.
 
-## Features
+Read [what this protects against](#what-this-protects-against) before adopting it. The guarantee is
+specific, and it does not cover an attacker with access to the browser profile on disk.
 
-- 🔒 AES-GCM 256-bit encryption
-- 🔑 Password-based key derivation (PBKDF2 with 100 thousand iterations)
-- 🧂 Automatic salt and IV generation
-- 🛡️ Built-in error handling for cryptographic operations
-- 💻 Works in browsers (using Web Crypto API)
-- 📦 **Secure Local Storage Wrapper** – store/retrieve data in `localStorage` securely with automatic
-  encryption/decryption
-- 📦 **Secure Session Storage Wrapper** – store/retrieve data in `sessionStorage` securely with automatic
-  encryption/decryption
+- 🔒 AES-GCM 256-bit authenticated encryption
+- 🔑 Non-extractable `CryptoKey` — the key material is never visible to JavaScript
+- 🧂 Fresh IV per write, carried inline with the ciphertext
+- 📦 Drop-in-shaped wrappers for `localStorage` and `sessionStorage`
+- 🌍 Safe to import under SSR (Next.js, Remix, SvelteKit)
+- 📐 Zero dependencies, fully typed
+
+## What this protects against
+
+Be precise about this before adopting it. bVault-js narrows the blast radius of stolen storage; it is
+not a defence against an attacker who is already executing script on your page.
+
+| Attack                                                                    | Result           | Why                                                           |
+| ------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------- |
+| Storage copied and replayed in another browser                            | **Defeated**     | The key does not serialize into the dump                      |
+| Passive exfiltration (`JSON.stringify(localStorage)`, extension scraping) | **Defeated**     | Yields ciphertext only                                        |
+| Casual inspection via DevTools                                            | **Defeated**     | Nothing readable at rest                                      |
+| Live XSS calling `subtle.decrypt()`                                       | **Not defeated** | Script in your origin can use the key handle                  |
+| Whole-profile file copy                                                   | **Not defeated** | Non-extractable is an API restriction, not encryption at rest |
+
+Injected script can _use_ the key while it runs on your page; it cannot _steal_ it for offline or
+cross-browser use. That turns permanent session compromise into access that ends when the script
+does. **bVault-js is not a substitute for preventing XSS**, and session tokens are still safest in
+`httpOnly` cookies, which JavaScript cannot read at all.
+
+### Non-extractable is not encryption at rest
+
+`extractable: false` stops JavaScript from reading the key bytes. It does **not** stop a native
+process that can read the browser profile directory.
+
+Firefox tracks ["CryptoKeys stored in IndexedDB should be cryptographically bound to
+profile"](https://bugzilla.mozilla.org/show_bug.cgi?id=1556794) as an open bug — they are not bound
+today. Chrome stores IndexedDB as LevelDB files that
+[forensics tooling reads routinely](https://www.browserforensics.app/en/blog/chrome-local-storage-and-indexeddb).
+Chrome's own position, [stated on the W3C WebCrypto
+list](https://lists.w3.org/Archives/Public/public-webcrypto/2012Dec/0018.html), is that
+non-extractable keys "are not meant to be a security primitive but purely for obfuscation".
+
+So bVault-js protects against an attacker who can read your storage **remotely** — via XSS, a
+malicious extension, or any script that ships data off the machine. It does not protect against one
+who has the profile files themselves. Closing that gap requires key material that never touches the
+profile, which means hardware-backed derivation such as the
+[WebAuthn PRF extension](https://developers.yubico.com/WebAuthn/Concepts/PRF_Extension/); full-disk
+encryption is the other mitigation worth having.
 
 ## Installation
 
@@ -30,155 +66,81 @@ npm install bvault-js
 
 ## Usage
 
-### Basic Encryption & Decryption
-
-```javascript
-import { encrypt, decrypt } from 'bvault-js';
-
-const password = 'supersecretpassword';
-const sensitiveData = 'My confidential information';
-
-// Encrypt data
-const { encryptedData, iv, salt } = await encrypt(sensitiveData, password);
-console.log('Encrypted:', encryptedData);
-console.log('IV:', iv);
-console.log('Salt:', salt);
-
-// Decrypt data
-const decrypted = await decrypt(encryptedData, password, iv, salt);
-console.log('Decrypted:', decrypted); // 'My confidential information'
-```
-
-### 🔐 Secure Local Storage Wrapper
-
-bVault-js provides a wrapper around `localStorage` so you can safely persist sensitive data in the browser.
-
-#### Initialization (must be done once at app entry point)
+Initialize once at your application's entry point, then use the wrappers anywhere.
 
 ```javascript
 import { initializeSecureStorage } from 'bvault-js';
 
 async function bootstrap() {
-  await initializeSecureStorage('my-strong-password');
+  await initializeSecureStorage();
   // Continue with app startup...
 }
 
 bootstrap();
 ```
 
-#### Usage Example
+On first run this generates an AES-GCM key and stores it in IndexedDB. On later runs it loads the
+same key. No password is involved — see [Why there is no password](#why-there-is-no-password).
+
+### Secure local storage
 
 ```javascript
 import { secureLocalStorage } from 'bvault-js';
 
-// Store data securely
 await secureLocalStorage.setItem('userProfile', {
   username: 'alice',
   email: 'alice@example.com',
 });
 
-// Retrieve data securely
 const stored = await secureLocalStorage.getItem('userProfile');
 const profile = stored ? JSON.parse(stored) : null;
-console.log(profile);
 
-// Remove a specific key
 secureLocalStorage.removeItem('userProfile');
-
-// Clear everything
-secureLocalStorage.clear();
+secureLocalStorage.clear(); // removes only bVault's own entries
 ```
 
-### 🔐 Secure Session Storage Wrapper
-
-bVault-js provides a wrapper around `sessionStorage` so you can securely store sensitive data that should only persist
-for the duration of the browser session.
-
-#### Initialization (must be done once at app entry point)
-
-```javascript
-import { initializeSecureStorage } from 'bvault-js';
-
-async function bootstrap() {
-  await initializeSecureStorage('my-strong-password');
-  // Continue with app startup...
-}
-
-bootstrap();
-```
-
-#### Usage Example
+### Secure session storage
 
 ```javascript
 import { secureSessionStorage } from 'bvault-js';
 
-// Store data securely (persists only for this session)
 await secureSessionStorage.setItem('authToken', 'abc123');
-
-// Retrieve data securely
-const stored = await secureSessionStorage.getItem('authToken');
-console.log(stored); // "abc123"
-
-// Remove a specific key
-secureSessionStorage.removeItem('authToken');
-
-// Clear everything for this session
-secureSessionStorage.clear();
+const token = await secureSessionStorage.getItem('authToken'); // "abc123"
 ```
 
-#### Framework Examples
+`setItem` and `getItem` are asynchronous because the Web Crypto API is asynchronous. This is not an
+implementation detail that can be removed: a synchronous API would require the raw key bytes to be
+held in JavaScript memory, which is exactly what makes a key stealable.
 
-- **React (entry point initialization)**
+### Framework examples
+
+**React**
 
 ```tsx
 // main.tsx
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App';
-import { initializeSecureStorage } from 'bvault-js';
-
-async function bootstrap() {
-  await initializeSecureStorage('react-password');
-  ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
-}
-
-bootstrap();
-```
-
-or
-
-```tsx
-// main.tsx
-import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { initializeSecureStorage } from 'bvault-js';
 
 (async () => {
-  await initializeSecureStorage('react-password');
+  await initializeSecureStorage();
   ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
 })();
 ```
 
-then
-
 ```tsx
 // App.tsx
 import { useEffect, useState } from 'react';
-import { secureLocalStorage, secureSessionStorage } from 'bvault-js';
+import { secureLocalStorage } from 'bvault-js';
 
 export default function App() {
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<{ username: string } | null>(null);
 
   useEffect(() => {
     (async () => {
       await secureLocalStorage.setItem('profile', { username: 'carol' });
       const data = await secureLocalStorage.getItem('profile');
-      if (data) profile = JSON.parse(data);
-
-      await secureSessionStorage.setItem('role', 'admin');
-      const roleData = await secureSession.getItem('role');
-      if (roleData) role = JSON.parse(roleData);
+      if (data) setProfile(JSON.parse(data));
     })();
   }, []);
 
@@ -186,23 +148,7 @@ export default function App() {
 }
 ```
 
-- **Vue 3**
-
-```ts
-// main.ts
-import { createApp } from 'vue';
-import App from './App.vue';
-import { initializeSecureStorage } from 'bvault-js';
-
-async function bootstrap() {
-  await initializeSecureStorage('vue-password');
-  createApp(App).mount('#app');
-}
-
-bootstrap();
-```
-
-or
+**Vue 3**
 
 ```ts
 // main.ts
@@ -211,56 +157,33 @@ import App from './App.vue';
 import { initializeSecureStorage } from 'bvault-js';
 
 (async () => {
-  await initializeSecureStorage('vue-password');
+  await initializeSecureStorage();
   createApp(App).mount('#app');
 })();
 ```
-
-then
 
 ```vue
 <!-- App.vue -->
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { secureLocalStorage, secureSessionStorage } from 'bvault-js';
+import { secureLocalStorage } from 'bvault-js';
 
-const profile = ref<any>(null);
+const profile = ref<{ username: string } | null>(null);
 
 onMounted(async () => {
   await secureLocalStorage.setItem('profile', { username: 'bob' });
   const data = await secureLocalStorage.getItem('profile');
-  if (data) profile = JSON.parse(data);
-
-  await secureSessionStorage.setItem('role', 'admin');
-  const roleData = await secureSessionStorage.getItem('role');
-  if (roleData) role = JSON.parse(roleData);
+  if (data) profile.value = JSON.parse(data);
 });
 </script>
 
 <template>
   <p v-if="profile">Hello {{ profile.username }}</p>
   <p v-else>Loading...</p>
-  <p v-if="role">Role: {{ role }}</p>
-  <p v-else>Loading...</p>
 </template>
 ```
 
-- **Svelte**
-
-```ts
-// main.ts
-import App from './App.svelte';
-import { initializeSecureStorage } from 'bvault-js';
-
-async function bootstrap() {
-  await initializeSecureStorage('svelte-password');
-  new App({ target: document.getElementById('app')! });
-}
-
-bootstrap();
-```
-
-or
+**Svelte**
 
 ```ts
 // main.ts
@@ -268,244 +191,87 @@ import App from './App.svelte';
 import { initializeSecureStorage } from 'bvault-js';
 
 (async () => {
-  await initializeSecureStorage('svelte-password');
+  await initializeSecureStorage();
   new App({ target: document.getElementById('app')! });
 })();
 ```
 
-then
+## Limitations you must plan for
 
-```svelte
-<!-- App.svelte -->
-<script lang="ts">
-  import { onMount } from 'svelte';
-  import { secureLocalStorage, secureSessionStorage } from 'bvault-js';
+### Key loss is total data loss
 
-  let profile: any = null;
+There is no password and therefore no recovery path. If IndexedDB is cleared — the user clears site
+data, or the browser evicts it under storage pressure — every stored value becomes permanently
+unreadable. bVault-js calls `navigator.storage.persist()` to reduce the risk, but browsers may
+refuse.
 
-  onMount(async () => {
-    await secureLocalStorage.setItem('profile', { username: 'carol' });
-    const data = await secureLocalStorage.getItem('profile');
-    if (data) profile = JSON.parse(data);
+When a value cannot be decrypted, `getItem` returns `null` and logs a warning. **It never deletes the
+stored value**, so your application can decide what to do.
 
-    await secureSessionStorage.setItem('role', 'admin');
-    const roleData = await secureSessionStorage.getItem('role');
-    if (roleData) role = JSON.parse(roleData);
-  });
-</script>
+Treat bVault-js as a cache for data you can re-fetch, not as a system of record.
 
-<p>{#if profile}Hello {profile.username}{:else}Loading...{/if}</p>
-<p>{#if role}Role: {role}{:else}Loading...{/if}</p>
-```
+### Safari discards everything after 7 days
 
----
+WebKit deletes all script-writable storage — IndexedDB, `localStorage`, `sessionStorage`, Service
+Workers — after seven days of browser use without interaction with your site. The key and the
+ciphertext go together, so nothing is orphaned, but **the vault is ephemeral on Safari**. Web apps
+added to the home screen are exempt.
 
-### File Encryption
+### Why there is no password
 
-```javascript
-import { encrypt } from 'bvault-js';
+Earlier versions derived the key from a password, and recommended sourcing it from a browser
+fingerprint. That recommendation has been withdrawn. A fingerprint is not secret — any script in your
+origin can recompute it — and it carries roughly
+[13 bits of entropy](https://arxiv.org/pdf/1812.03920) where key material needs 100+. It is also
+unstable: fingerprinting libraries report
+[90.5–95.5% accuracy](https://www.thumbmarkjs.com/resources/tech/), so a browser or driver update
+silently changes the key and renders stored data undecryptable.
 
-async function encryptFile(file, password) {
-  const reader = new FileReader();
-
-  return new Promise((resolve, reject) => {
-    reader.onload = async () => {
-      try {
-        const encrypted = await encrypt(reader.result, password);
-        resolve(encrypted);
-      } catch (error) {
-        reject(error);
-      }
-    };
-    reader.readAsText(file);
-  });
-}
-```
-
-### Secure Configuration Storage
-
-```javascript
-import { encrypt, decrypt } from 'bvault-js';
-
-async function saveConfig(config, password) {
-  const encrypted = await encrypt(JSON.stringify(config), password);
-  return {
-    config: encrypted.encryptedData,
-    iv: encrypted.iv,
-    salt: encrypted.salt,
-  };
-}
-
-async function loadConfig(storedConfig, password) {
-  try {
-    const decrypted = await decrypt(
-      storedConfig.config,
-      password,
-      storedConfig.iv,
-      storedConfig.salt,
-    );
-    return JSON.parse(decrypted);
-  } catch (error) {
-    return null;
-  }
-}
-```
+A generated non-extractable key has none of these problems: full entropy, perfectly stable, and
+impossible to reconstruct off-device.
 
 ## API Reference
 
-### `encrypt(data: string, password: string)`
+### `initializeSecureStorage(): Promise<void>`
 
-Encrypts data using a password
+Loads the encryption key for this origin, generating one on first use, and clears any data written by
+v0.x. Call once at startup before using the wrappers.
 
-**Parameters:**
+### `secureLocalStorage` / `secureSessionStorage`
 
-- `data`: String to encrypt
-- `password`: Encryption password
+- `await setItem(key: string, value: unknown): Promise<void>` — objects are JSON-stringified
+- `await getItem(key: string): Promise<string | null>` — `null` if absent or undecryptable
+- `removeItem(key: string): void`
+- `clear(): void` — removes only entries written by bVault-js
 
-**Returns:** Promise resolving to:
+Keys are stored under a `bv1:` prefix so bVault-js never collides with, or clears, storage belonging
+to other libraries.
 
-```json
-{
-  encryptedData: string,
-  iv: string,
-  salt: string
-}
-```
+### `destroySecureStorage(): Promise<void>`
 
-### `decrypt(encryptedData: string, password: string, iv: string, salt: string)`
+Deletes the key and every value stored under it. Intended for logout or account switching. There is
+no recovery path.
 
-Decrypts data using the original password and stored parameters
+### `isSecureStorageInitialized(): boolean`
 
-### `secureLocalStorage`
+### Errors
 
-Secure wrapper around `localStorage` with async encryption/decryption.
+`EncryptionError` and `DecryptionError` are exported. `setItem` throws `EncryptionError` on failure;
+`getItem` returns `null` rather than throwing.
 
-- `await secureLocalStorage.setItem(key: string, value: unknown)`
-- `await secureLocalStorage.getItem(key: string): Promise<string | null>`
-- `secureLocalStorage.removeItem(key: string)`
-- `secureLocalStorage.clear()`
+## Migrating from 0.x
 
-### `secureSessionStorage`
+1.0.0 is a breaking release.
 
-Secure wrapper around `sessionStorage` with async encryption/decryption.
+- `initializeSecureStorage()` no longer takes a password
+- `encrypt` and `decrypt` have been removed — the library now does one job
+- Data written by 0.x **cannot be migrated**, because keys derived from a password or fingerprint are
+  not recoverable. It is deleted once on first initialization, with a warning. Only keys that 0.x
+  recorded in its own metadata are touched; storage belonging to other libraries is left alone.
 
-- `await secureSessionStorage.setItem(key: string, value: unknown)`
-- `await secureSessionStorage.getItem(key: string): Promise<string | null>`
-- `secureSessionStorage.removeItem(key: string)`
-- `secureSessionStorage.clear()`
-
-### `initializeSecureStorage(password: string)`
-
-Initializes secure storage. Must be called once (e.g., at app startup).
-
-### `isSecureStorageInitialized()`
-
-Checks if secure storage has been initialized.
-
----
-
-## Error Handling
-
-The library throws specific error types for cryptographic operations:
-
-- `EncryptionError`
-- `DecryptionError`
-
-```javascript
-try {
-  const decrypted = await secureLocalStorage.getItem('someKey');
-} catch (error) {
-  if (error instanceof DecryptionError) {
-    console.error('Decryption failed - check your password');
-  }
-}
-```
-
----
-
-## Security Notes
-
-1. **Password Strength**: Always use strong, unique passwords for encryption
-2. **Secure Storage**: Safely store IVs and salts with encrypted data
-3. **Never Hardcode**: Never embed passwords in source code
-4. **Key Management**: Consider rotating encryption keys periodically
-5. **Transport Security**: Use HTTPS when transmitting encrypted data
-
-## Limitations
-
-While bVault-js provides robust encryption capabilities, it has some intentional limitations in its current version:
-
-### 1. **Password-Based Key Constraints**
-
-- **No Key Rotation**: Changing passwords requires re-encrypting all data
-- **No Key Export**: Derived keys cannot be exported/backed up independently
-
-### 2. **Performance Considerations**
-
-- **Fixed Iterations**: PBKDF2 fixed at 100,000 iterations (secure but computationally expensive)
-- **Large Data**: Not optimized for encrypting files >1GB due to memory constraints
-
-### 3. **Algorithm Constraints**
-
-- **Fixed Algorithms**: Only supports AES-GCM with 256-bit keys
-- **No Algorithm Agility**: Cannot switch to other encryption algorithms
-
-### 4. **Input Type Constraints**
-
-- **String-Only Input**: Only encrypts/decrypts UTF-8 strings (not binary data)
-- **No Stream Support**: Requires complete data in memory
-
-### 5. **Operational Constraints**
-
-- **No Key Stretching**: Requires full PBKDF2 derivation on each operation
-- **No Session Caching**: Keys aren't cached between operations
-
-### 6. **Environmental Constraints**
-
-- **Web Crypto Dependency**: Requires modern browsers or Node.js v15+
-- **No Fallback**: No alternative implementations for non-Web Crypto environments
-
-### 7. **Security Model Constraints**
-
-- **No Authentication**: Doesn't verify data integrity before decryption
-- **No Key Separation**: Same derivation parameters for encryption/decryption
-
-## Roadmap & Future Improvements
-
-We're actively working to enhance bVault-js with these planned features:
-
-- [ ] **Binary Data Support**: Encrypt/decrypt ArrayBuffer and Blob types
-- [ ] **Configurable Algorithms**: Allow choosing between AES-GCM and ChaCha20-Poly1305
-- [ ] **Key Management**: Add key rotation and export capabilities
-- [ ] **Stream Processing**: Support for large file encryption through stream processing
-- [ ] **Web Worker Support**: Offload crypto operations to background threads
-- [ ] **Enhanced Security**:
-  - [ ] Add authenticated data support (AAD) for AES-GCM
-  - [ ] Implement configurable iteration counts
-  - [ ] Add key derivation memory hardening (Argon2 support)
-- [ ] **Extended Environments**:
-  - [ ] React Native compatibility
-  - [ ] Service worker support
-- [ ] **Developer Experience**:
-  - [ ] Additional error diagnostics
-  - [ ] Password strength meter integration
-  - [ ] TypeScript type enhancements
-
-## When to Consider Alternatives
-
-Consider other solutions if you need:
-
-- Binary data encryption/decryption today
-- Encryption of files larger than 1GB
-- Algorithm agility (e.g., ChaCha20-Poly1305 support)
-- Hardware Security Module (HSM) integration
-- Post-quantum cryptography algorithms
-
-## Contribution
-
-Contributions are welcome! Please read the [Contribution Guidelines](CONTRIBUTING.md) before submitting pull requests.
-We especially welcome help with items from our roadmap.
+If you need password-based encryption for something other than browser storage, use the Web Crypto
+API directly or a dedicated library.
 
 ## License
 
-MIT © [Aaron Will Djaba](https://github.com/kurtiz)
+MIT

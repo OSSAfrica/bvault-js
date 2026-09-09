@@ -2,12 +2,10 @@
   "name": "bvault-js",
   "version": "0.3.2",
   "type": "module",
-  "description": "A frontend cryptographic library for encrypting and decrypting data in the browser",
+  "description": "Encrypted browser storage backed by a key that cannot be exported from the browser",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build:wasm": "wasm-pack build bvault_js_rs --target bundler --out-dir ../src/pkg",
-    "build:now": "npm run build:wasm && tsc && cp -r src/pkg dist/pkg",
     "build": "tsc",
     "prepare": "npm run build",
     "format": "prettier --write .",
@@ -30,8 +28,7 @@
     "vitest": "^3.2.4"
   },
   "files": [
-    "dist",
-    "dist/pkg"
+    "dist"
   ],
   "repository": {
     "type": "git",
@@ -42,7 +39,10 @@
     "encrypt",
     "decrypt",
     "frontend",
-    "secure"
+    "secure",
+    "localstorage",
+    "sessionstorage",
+    "webcrypto"
   ],
   "author": {
     "name": "Aaron Will Djaba",
