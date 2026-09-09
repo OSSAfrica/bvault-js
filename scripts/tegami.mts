@@ -57,6 +57,24 @@ const release = tegami({
 });
 
 /**
+ * Drop git trailers from a generated changelog body.
+ *
+ * Entries are materialised from commit messages verbatim, so every trailer the
+ * commit carried - `Signed-off-by:` from the DCO check, and any tooling that
+ * stamps its own - would otherwise be published to npm inside CHANGELOG.md.
+ * Trailers are metadata about the commit, not release notes.
+ *
+ * `Refs`/`Closes`/`Fixes` are deliberately kept: they point at issues a reader
+ * of the changelog may genuinely want.
+ */
+const DROPPED_TRAILER =
+  /^(?:signed-off-by|co-authored-by|claude-session|reviewed-by|reported-by|tested-by|acked-by|cc):[ \t].*$/gim;
+
+function stripTrailers(content: string): string {
+  return content.replace(DROPPED_TRAILER, '').replace(/\n{3,}(?=\n*$)/, '\n');
+}
+
+/**
  * Turn conventional commits since the last tag into real changelog files.
  *
  * Tegami resolves a commit's affected packages from its scope, so an *unscoped*
@@ -82,12 +100,13 @@ async function materializeCommitChangelogs(): Promise<number> {
 
   for (const entry of entries) {
     const unscoped = Object.keys(entry.packages).length === 0;
+    const stripped = stripTrailers(entry.content);
     const content = unscoped
-      ? entry.content.replace(
+      ? stripped.replace(
           /^---\npackages: \{\}\n---\n/,
           `---\npackages: ["${PACKAGE_NAME}"]\n---\n`,
         )
-      : entry.content;
+      : stripped;
 
     await writeFile(join(CHANGELOG_DIR, entry.filename), content);
   }
