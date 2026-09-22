@@ -175,6 +175,21 @@ function createSecureRemoveItem(target: 'local' | 'session') {
 }
 
 /**
+ * Returns all raw storage keys belonging to bVault in the target storage.
+ */
+function getOwnedRawKeys(target: 'local' | 'session'): string[] {
+  const storage = getStorage(target);
+  const owned: string[] = [];
+
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (key?.startsWith(KEY_PREFIX)) owned.push(key);
+  }
+
+  return owned;
+}
+
+/**
  * Creates a secure clear wrapper.
  *
  * Removes only bVault's own entries, leaving the rest of the application's
@@ -183,14 +198,19 @@ function createSecureRemoveItem(target: 'local' | 'session') {
 function createSecureClear(target: 'local' | 'session') {
   return (): void => {
     const storage = getStorage(target);
-    const owned: string[] = [];
-
-    for (let i = 0; i < storage.length; i++) {
-      const key = storage.key(i);
-      if (key?.startsWith(KEY_PREFIX)) owned.push(key);
-    }
-
+    const owned = getOwnedRawKeys(target);
     owned.forEach((key) => storage.removeItem(key));
+  };
+}
+
+/**
+ * Creates a secure keys wrapper.
+ *
+ * Returns an array of all bVault-owned keys with the prefix removed.
+ */
+function createSecureKeys(target: 'local' | 'session') {
+  return (): string[] => {
+    return getOwnedRawKeys(target).map((key) => key.slice(KEY_PREFIX.length));
   };
 }
 
@@ -204,6 +224,10 @@ export const secureLocalStorage = {
   getItem: createSecureGetItem('local'),
   removeItem: createSecureRemoveItem('local'),
   clear: createSecureClear('local'),
+  keys: createSecureKeys('local'),
+  get length(): number {
+    return getOwnedRawKeys('local').length;
+  },
 };
 
 // ---------- SessionStorage Secure Wrapper ----------
@@ -216,6 +240,10 @@ export const secureSessionStorage = {
   getItem: createSecureGetItem('session'),
   removeItem: createSecureRemoveItem('session'),
   clear: createSecureClear('session'),
+  keys: createSecureKeys('session'),
+  get length(): number {
+    return getOwnedRawKeys('session').length;
+  },
 };
 
 /**
