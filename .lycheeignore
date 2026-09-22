@@ -1,0 +1,2 @@
+# npmjs.com returns 403 to CI runners (bot protection); the package page is valid.
+^https://www\.npmjs\.com/
