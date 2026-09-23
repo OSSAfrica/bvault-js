@@ -1,0 +1,4 @@
+# npmjs.com returns 403 to automated clients (bot protection)
+^https://www\.npmjs\.com/package/bvault-js
+# WakaTime project pages are private; the badge .svg itself is still checked
+^https://wakatime\.com/badge/user/[^/]+/project/[^/.]+$
