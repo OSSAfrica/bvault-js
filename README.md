@@ -1,7 +1,7 @@
 # bVault-js — Encrypted Browser Storage
 
 [![npm version](https://img.shields.io/npm/v/bvault-js?logo=npm)](https://www.npmjs.com/package/bvault-js)
-[![wakatime](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c.svg)](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c)
+[![wakatime](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c.svg)](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c) 
 [![NPM Type Definitions](https://img.shields.io/npm/types/bvault-js?logo=typescript)](https://img.shields.io/npm/types/bvault-js)
 [![GitHub License](https://img.shields.io/github/license/kurtiz/bvault-js)](https://github.com/kurtiz/bvault-js)
 
