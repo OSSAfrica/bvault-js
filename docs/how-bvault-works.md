@@ -30,11 +30,6 @@ ciphertext, and the key does not come with the copy.
 
 ## Architecture
 
-![bVault-js architecture](assets/architecture.png)
-
-The same diagram as Mermaid, which GitHub renders inline and which is easier to
-keep up to date:
-
 ```mermaid
 flowchart TD
 
@@ -250,12 +245,15 @@ sequenceDiagram
     W-->>App: '{"id":1}'
   else tampered, wrong key, or key lost
     C-->>W: DecryptionError
-    W-->>App: null (value left in storage, warning logged once)
+    W-->>App: null (value left in storage, error logged)
   end
 ```
 
 `getItem` returns a string. If you stored an object, call `JSON.parse` on the
 result.
+
+Every failed read logs a `console.error`. The first `DecryptionError` also logs
+a one-time warning that the key may have been cleared or evicted.
 
 ### Destroying
 
@@ -289,14 +287,20 @@ What bVault-js does well:
 
 1. **Copied storage is useless elsewhere.** The key is non-extractable, so a
    dump of `localStorage` or `sessionStorage` can't be decrypted in another
-   browser. Session tokens can't be replayed from a stolen copy.
-2. **Passive exfiltration only gets ciphertext.** Scripts or extensions that
-   scrape storage (`JSON.stringify(localStorage)`) read nothing useful.
+   browser, and a token stored this way can't be replayed from a stolen copy.
+   Session tokens are still safer in `httpOnly` cookies (see
+   [Limitations](#limitations)).
+2. **Code that reads only Web Storage gets ciphertext.** A script or extension
+   that scrapes storage (`JSON.stringify(localStorage)`) reads nothing useful.
+   This protection is narrow: any script running in the same origin, such as an
+   analytics tag or an injected extension script, can open the `bvault`
+   IndexedDB database, take the `CryptoKey` handle and decrypt everything.
 3. **Nothing readable at rest in Web Storage.** DevTools and casual inspection
    show only base64url blobs.
-4. **XSS access is time-limited.** Injected script can _use_ the key while it
-   runs on the page. It can't _take_ the key for offline or cross-browser use,
-   so access ends when the script stops running.
+4. **XSS can't take the key away.** Injected script can _use_ the key while it
+   runs on the page, but it can't _take_ the key for offline or cross-browser
+   use, so its use of the key ends when the script stops running. While it
+   runs, though, it can read every value.
 5. **Authenticated encryption.** AES-256-GCM with a 128-bit tag. Tampered
    values or values encrypted under another key are rejected.
 6. **Full-entropy key.** The browser generates the key, so there's no password
@@ -335,8 +339,8 @@ Read these before adopting bVault-js.
   browser evicting storage under pressure all make every value permanently
   unreadable. `navigator.storage.persist()` is requested, but browsers may
   refuse it. Only store data you can fetch again.
-- **Safari deletes everything after 7 days** without user interaction, both the
-  key and the ciphertext. Home-screen web apps are exempt.
+- **Safari deletes everything after 7 days of browser use without interaction
+  with the site**, both the key and the ciphertext. Home-screen web apps are exempt.
 - **One key per origin.** Every tab, and all code in the origin, shares one key.
   There's no per-user or per-namespace key. Use `destroySecureStorage()` when
   the user changes.
@@ -383,7 +387,7 @@ has an issue open for contributors.
 
 - Read [`src/lib/secure-storage.ts`](../src/lib/secure-storage.ts) first. It
   shows how the other modules fit together.
-- Run `npm install` and `npm test`. The tests in `test/secure-storage.test.ts`
+- Run `npm install` and `npm run test:run`. The tests in `test/secure-storage.test.ts`
   describe the behaviour the library promises.
 - Look for issues labelled
   [`good first issue`](https://github.com/OSSAfrica/bvault-js/labels/good%20first%20issue).

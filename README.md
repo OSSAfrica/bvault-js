@@ -38,6 +38,9 @@ cross-browser use. That turns permanent session compromise into access that ends
 does. **bVault-js is not a substitute for preventing XSS**, and session tokens are still safest in
 `httpOnly` cookies, which JavaScript cannot read at all.
 
+For how the library works internally and a full list of its strengths and limitations, see
+[How bVault-js works](docs/how-bvault-works.md).
+
 ### Non-extractable is not encryption at rest
 
 `extractable: false` stops JavaScript from reading the key bytes. It does **not** stop a native
