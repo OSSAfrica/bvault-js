@@ -242,6 +242,8 @@ v0.x. Call once at startup before using the wrappers.
 - `await getItem(key: string): Promise<string | null>` — `null` if absent or undecryptable
 - `removeItem(key: string): void`
 - `clear(): void` — removes only entries written by bVault-js
+- `keys(): string[]` — returns all keys stored by bVault-js (prefix stripped)
+- `length: number` — number of entries stored by bVault-js
 
 Keys are stored under a `bv1:` prefix so bVault-js never collides with, or clears, storage belonging
 to other libraries.
