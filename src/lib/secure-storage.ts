@@ -178,7 +178,12 @@ function createSecureRemoveItem(target: 'local' | 'session') {
  * Returns all raw storage keys belonging to bVault in the target storage.
  */
 function getOwnedRawKeys(target: 'local' | 'session'): string[] {
-  const storage = getStorage(target);
+  let storage: Storage;
+  try {
+    storage = getStorage(target);
+  } catch {
+    return [];
+  }
   const owned: string[] = [];
 
   for (let i = 0; i < storage.length; i++) {
@@ -230,6 +235,10 @@ export const secureLocalStorage = {
   },
 };
 
+Object.defineProperty(secureLocalStorage, 'length', {
+  enumerable: false,
+});
+
 // ---------- SessionStorage Secure Wrapper ----------
 /**
  * Secure wrapper around `sessionStorage`.
@@ -245,6 +254,10 @@ export const secureSessionStorage = {
     return getOwnedRawKeys('session').length;
   },
 };
+
+Object.defineProperty(secureSessionStorage, 'length', {
+  enumerable: false,
+});
 
 /**
  * Returns true if secure storage has been initialized.
