@@ -155,6 +155,31 @@ describe('crypto', () => {
       SLOW_TEST_TIMEOUT,
     );
 
+    it('converts empty values in both directions', () => {
+      expect(bufferToBase64(new Uint8Array(0))).toBe('');
+      expect(base64ToBuffer('')).toEqual(new Uint8Array(0));
+    });
+
+    it.each([
+      ['two padding characters', '+w==', new Uint8Array([0xfb])],
+      ['one padding character', '+/8=', new Uint8Array([0xfb, 0xff])],
+      ['no padding', '+/8A', new Uint8Array([0xfb, 0xff, 0x00])],
+    ])('accepts standard base64 with %s', (_padding, base64, bytes) => {
+      expect(base64ToBuffer(base64)).toEqual(bytes);
+    });
+
+    it.each(['a', '%%%'])('throws for invalid base64 input %s', (input) => {
+      expect(() => base64ToBuffer(input)).toThrow();
+    });
+
+    it.each([8 * 1024, 8 * 1024 + 1])(
+      'round-trips a payload of %i bytes at the chunk boundary',
+      (length) => {
+        const bytes = Uint8Array.from({ length }, (_, index) => index % 256);
+        expect(base64ToBuffer(bufferToBase64(bytes))).toEqual(bytes);
+      },
+    );
+
     it('handles special characters in text conversion', () => {
       const text = 'Hello 世界! 👋';
       expect(bufferToString(stringToBuffer(text))).toBe(text);
