@@ -259,8 +259,12 @@ no recovery path.
 
 ### Errors
 
-`EncryptionError` and `DecryptionError` are exported. `setItem` throws `EncryptionError` on failure;
-`getItem` returns `null` rather than throwing.
+`EncryptionError` and `DecryptionError` are exported. `setItem` throws `EncryptionError` when
+encryption fails; `getItem` returns `null` rather than throwing.
+
+Errors from the storage write itself are not wrapped. If storage is full, `setItem` rejects with the
+browser's native `DOMException` (`name === 'QuotaExceededError'`; older Firefox reports
+`NS_ERROR_DOM_QUOTA_REACHED`), so you can tell it apart from an encryption failure.
 
 ## Migrating from 0.x
 

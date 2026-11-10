@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  EncryptionError,
   initializeSecureStorage,
   isSecureStorageInitialized,
   secureLocalStorage,
@@ -131,6 +132,28 @@ describe('secure storage', () => {
       localStorage.setItem(PREFIX + 'token', raw.slice(0, -4) + 'AAAA');
 
       expect(await secureLocalStorage.getItem('token')).toBeNull();
+    });
+  });
+
+  describe('storage errors', () => {
+    it('propagates a quota error unchanged instead of EncryptionError', async () => {
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('storage full', 'QuotaExceededError');
+      });
+
+      const err = await secureLocalStorage.setItem('k', 'v').catch((e) => e);
+
+      expect(err).toBeInstanceOf(DOMException);
+      expect(err.name).toBe('QuotaExceededError');
+      expect(err).not.toBeInstanceOf(EncryptionError);
+    });
+
+    it('still reports encryption failures as EncryptionError', async () => {
+      vi.spyOn(crypto.subtle, 'encrypt').mockRejectedValue(new Error('boom'));
+
+      await expect(secureLocalStorage.setItem('k', 'v')).rejects.toBeInstanceOf(
+        EncryptionError,
+      );
     });
   });
 
