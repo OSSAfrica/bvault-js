@@ -1,7 +1,8 @@
 # bVault-js — Encrypted Browser Storage
 
 [![npm version](https://img.shields.io/npm/v/bvault-js?logo=npm)](https://www.npmjs.com/package/bvault-js)
-[![wakatime](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c.svg)](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c) [![NPM Type Definitions](https://img.shields.io/npm/types/bvault-js?logo=typescript)](https://img.shields.io/npm/types/bvault-js)
+![wakatime](https://wakatime.com/badge/user/9657174f-2430-4dfd-aaef-2b316eb71a36/project/4f0c1980-a3b3-432d-a157-1068783e6a7c.svg)
+[![NPM Type Definitions](https://img.shields.io/npm/types/bvault-js?logo=typescript)](https://img.shields.io/npm/types/bvault-js)
 [![GitHub License](https://img.shields.io/github/license/kurtiz/bvault-js)](https://github.com/kurtiz/bvault-js)
 
 bVault-js encrypts data in `localStorage` and `sessionStorage` with a key that **JavaScript cannot
@@ -36,6 +37,9 @@ Injected script can _use_ the key while it runs on your page; it cannot _steal_ 
 cross-browser use. That turns permanent session compromise into access that ends when the script
 does. **bVault-js is not a substitute for preventing XSS**, and session tokens are still safest in
 `httpOnly` cookies, which JavaScript cannot read at all.
+
+For how the library works internally and a full list of its strengths and limitations, see
+[How bVault-js works](docs/how-bvault-works.md).
 
 ### Non-extractable is not encryption at rest
 
