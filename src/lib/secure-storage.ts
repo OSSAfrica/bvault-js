@@ -120,20 +120,26 @@ const reportPossibleKeyLoss = async (): Promise<void> => {
 
 /**
  * Creates a secure setItem wrapper.
+ *
+ * Only encryption failures become `EncryptionError`. Errors from the storage
+ * write itself (e.g. `QuotaExceededError`, `SecurityError`) propagate unchanged
+ * so callers can tell "storage full" from "crypto failed".
  */
 function createSecureSetItem(target: 'local' | 'session') {
   return async (key: string, value: unknown): Promise<void> => {
     const cryptoKey = requireKey();
 
+    let payload: string;
     try {
-      const payload = await encryptWithKey(processValue(value), cryptoKey);
-      getStorage(target).setItem(KEY_PREFIX + key, payload);
+      payload = await encryptWithKey(processValue(value), cryptoKey);
     } catch (error) {
-      throw new EncryptionError(`Failed to encrypt and store key "${key}"`, {
+      throw new EncryptionError(`Failed to encrypt key "${key}"`, {
         cause: error,
         context: { target, key },
       });
     }
+
+    getStorage(target).setItem(KEY_PREFIX + key, payload);
   };
 }
 
