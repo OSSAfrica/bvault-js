@@ -271,6 +271,16 @@ no recovery path.
 If you need password-based encryption for something other than browser storage, use the Web Crypto
 API directly or a dedicated library.
 
+## Contributing
+
+Read the [contribution guidelines](CONTRIBUTING.md) for setup, validation and pull
+request requirements. The [OSSAfrica contribution guide](https://github.com/OSSAfrica/.github/blob/main/CONTRIBUTING.md)
+and [Code of Conduct](https://github.com/OSSAfrica/.github/blob/main/CODE_OF_CONDUCT.md)
+also apply.
+
+Every contribution commit requires a DCO sign-off and a GitHub-verified
+cryptographic signature (`git commit -S -s`).
+
 ## License
 
 MIT
