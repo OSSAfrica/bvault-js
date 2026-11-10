@@ -57,9 +57,8 @@ reintroduce password or fingerprint derivation. Keep threat-model claims precise
 storage-copy protection does not prevent live script in the origin from using the
 key, or protect against an attacker reading the whole browser profile.
 
-The architecture walkthrough is being reviewed in
-[PR #31](https://github.com/OSSAfrica/bvault-js/pull/31). Check its status before
-using it as the final reference.
+Read [How bVault-js works](docs/how-bvault-works.md) for the architecture,
+key lifecycle, payload format and known limitations.
 
 ## Commit requirements
 

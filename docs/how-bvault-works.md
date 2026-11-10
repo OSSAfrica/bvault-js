@@ -391,8 +391,9 @@ has an issue open for contributors.
   describe the behaviour the library promises.
 - Look for issues labelled
   [`good first issue`](https://github.com/OSSAfrica/bvault-js/labels/good%20first%20issue).
-- Every commit needs a `Signed-off-by` line (`git commit -s`). See
-  [DCO.md](../DCO.md).
+- Every contribution commit needs DCO sign-off and a GitHub-verified
+  cryptographic signature (`git commit -S -s`). See the
+  [contribution guide](../CONTRIBUTING.md) and [DCO.md](../DCO.md).
 - Changes to the crypto or key handling need a test showing the property still
   holds. The existing tests for non-extractability, tampering and IV uniqueness
   are good models.
