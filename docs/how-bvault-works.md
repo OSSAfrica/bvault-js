@@ -149,6 +149,9 @@ The orchestrator and the wrappers.
   `import 'bvault-js'` from throwing under server-side rendering.
 - Objects are passed through `JSON.stringify` before encryption. Everything
   else goes through `String()`.
+- `setItem` wraps encryption failures in `EncryptionError`. Storage-write errors,
+  including `QuotaExceededError`, propagate unchanged so callers can distinguish
+  storage failures from encryption failures.
 
 ### `src/lib/crypto.ts`
 
@@ -374,9 +377,6 @@ has an issue open for contributors.
 - **Values come back as strings ([#15](https://github.com/OSSAfrica/bvault-js/issues/15)).** Objects need `JSON.parse`. `undefined`
   becomes the string `"undefined"`. `Date`, `Map` and similar types lose their
   type.
-- **Storage-full errors are reported as `EncryptionError` ([#11](https://github.com/OSSAfrica/bvault-js/issues/11)).** A
-  `QuotaExceededError` from Web Storage is hard to tell apart from a crypto
-  failure.
 - **Tests run in jsdom with `fake-indexeddb` ([#18](https://github.com/OSSAfrica/bvault-js/issues/18)).** Nothing yet checks how real
   Chromium, Firefox or WebKit store non-extractable keys.
 - **Web Storage limits still apply.** Web Storage is synchronous, limited to
