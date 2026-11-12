@@ -8,6 +8,7 @@ import { clearLegacyData } from './migration.js';
 let isInitialized = false;
 let storageKey: CryptoKey | null = null;
 let keyLossReported = false;
+let initPromise: Promise<void> | null = null;
 
 /**
  * Prefix applied to every key bVault writes.
@@ -64,6 +65,16 @@ const getStorage = (target: 'local' | 'session'): Storage => {
 export const initializeSecureStorage = async (): Promise<void> => {
   if (isInitialized) return;
 
+  // Concurrent callers (StrictMode's double effect, two entry points) share one
+  // run. The promise is cleared when it settles, so a failure can be retried.
+  initPromise ??= runInitialization().finally(() => {
+    initPromise = null;
+  });
+
+  await initPromise;
+};
+
+const runInitialization = async (): Promise<void> => {
   try {
     await clearLegacyData();
     await BVaultDB.initialize();
@@ -258,5 +269,6 @@ export const resetSecureStorageState = (): void => {
   isInitialized = false;
   storageKey = null;
   keyLossReported = false;
+  initPromise = null;
   resetKeyCache();
 };
