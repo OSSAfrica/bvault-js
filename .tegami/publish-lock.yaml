@@ -1,0 +1,12 @@
+core:changelogs:
+  - content: "---\npackages:\n  bvault-js:\n    type: major\n---\n\n### Format retained prerelease changelogs\n\n### Prepare preview releases with formatted changelogs\n\n### Unblock ESM package validation and App releases\n\n### Propagate storage errors from setItem instead of wrapping as EncryptionError (#49)\n\nPreserve the contribution with a verified squash commit.\n\n### Fine-tune CodeQL and stalebot config\n\n# Encrypt storage with a non-extractable CryptoKey\n\nbVault derived its encryption key from a password, and recommended sourcing\nthat password from a browser fingerprint. That key can be recomputed by any\nscript in the origin, carries roughly 13 bits of entropy, and drifts often\nenough that stored data becomes silently undecryptable.\n\nGenerate the key with crypto.subtle.generateKey(..., extractable: false) and\npersist it in IndexedDB instead. Its raw bytes are never exposed to\nJavaScript, so storage that is copied and replayed in another browser cannot\nbe decrypted. Live XSS can still use the key handle on the page; it can no\nlonger steal it for offline or cross-browser use.\n\nThe IV now travels inline with the ciphertext as\nversion(1) || iv(12) || ciphertext+tag, which removes the per-read IndexedDB\nlookup for metadata.\n\nAlso fixes three bugs found while reworking this:\n\n- getItem deleted the stored value whenever decryption failed, so a transient\n  error or an evicted key destroyed user data.\n- secure-storage read localStorage at module load, making the package throw\n  on import under server-side rendering.\n- bufferToBase64 spread the byte array into String.fromCharCode and overflowed\n  the call stack past ~100KB.\n\nRemove the bvault_js_rs crate. It implemented AES-CBC with a 16-byte IV and\nstandard base64 against a library writing AES-GCM with a 12-byte IV and\nURL-safe base64, so it could not decrypt anything bVault wrote.\n\nBREAKING CHANGE: initializeSecureStorage() no longer takes a password, the\nencrypt/decrypt exports are removed, and data written by 0.x is cleared once\non initialization because its key is not recoverable.\n\nRefs #5\n"
+    filename: 2026-11-13-mwfm9cqc.md
+    v: 0.0.0
+core:packages:
+  - changelogIds:
+      - 2026-11-13-mwfm9cqc.md
+    id: npm:bvault-js
+    updated: true
+npm:packages:
+  - distTag: preview
+    id: npm:bvault-js

@@ -1,6 +1,6 @@
 {
   "name": "bvault-js",
-  "version": "0.3.4",
+  "version": "1.0.0-preview.0",
   "type": "module",
   "description": "Encrypted browser storage backed by a key that cannot be exported from the browser",
   "main": "dist/index.js",
