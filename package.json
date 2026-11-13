@@ -5,6 +5,13 @@
   "description": "Encrypted browser storage backed by a key that cannot be exported from the browser",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
@@ -13,12 +20,13 @@
     "prepublishOnly": "npm run ci",
     "test": "vitest",
     "test:run": "vitest run",
-    "ci": "npm run build && npm run check-format && npm run test:run",
+    "ci": "npm run build && npm run check-format && npm run test:run && npm run check-package",
     "bundle": "esbuild dist/index.js --bundle --minify --outfile=dist/bvault.min.js",
     "release": "node scripts/tegami.mts",
     "release:version": "node scripts/tegami.mts version",
     "release:publish": "node scripts/tegami.mts publish",
-    "release:check": "node scripts/tegami.mts check-publish"
+    "release:check": "node scripts/tegami.mts check-publish",
+    "check-package": "publint && attw --pack . --profile esm-only"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

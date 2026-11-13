@@ -193,13 +193,17 @@ npm run ci
 git diff --check
 ```
 
-`npm run ci` compiles TypeScript, checks Prettier formatting and runs Vitest once.
+`npm run ci` compiles TypeScript, checks Prettier formatting, runs Vitest once and
+validates the packed package with publint and Are the Types Wrong?. The package
+is ESM-only, so type validation uses the `esm-only` profile. It checks Node ESM
+and bundler resolution; synchronous CommonJS `require()` is unsupported.
 You can also run the checks individually:
 
 ```sh
 npm run build
 npm run check-format
 npm run test:run
+npm run check-package
 ```
 
 - Follow the existing TypeScript style and use Prettier for files you change.
