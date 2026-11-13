@@ -35,6 +35,11 @@ import { github } from 'tegami/plugins/github';
 const PACKAGE_NAME = 'bvault-js';
 const CHANGELOG_DIR = '.tegami';
 
+async function writeFormattedMarkdown(filepath: string, content: string) {
+  const options = await resolveConfig(filepath);
+  await writeFile(filepath, await format(content, { ...options, filepath }));
+}
+
 const release = tegami({
   // Keep the 1.0 API on an opt-in channel until the stable release is ready.
   packages: {
@@ -55,12 +60,8 @@ const release = tegami({
       // Run before GitHub's applyCliDraft hook commits the generated files.
       async applyCliDraft() {
         const filepath = join(this.cwd, 'CHANGELOG.md');
-        const options = await resolveConfig(filepath);
         const content = await readFile(filepath, 'utf8');
-        await writeFile(
-          filepath,
-          await format(content, { ...options, filepath }),
-        );
+        await writeFormattedMarkdown(filepath, content);
       },
     },
     github({
@@ -129,7 +130,8 @@ async function materializeCommitChangelogs(): Promise<number> {
         )
       : stripped;
 
-    await writeFile(join(CHANGELOG_DIR, entry.filename), content);
+    // Prereleases retain this source for replay into the stable changelog.
+    await writeFormattedMarkdown(join(CHANGELOG_DIR, entry.filename), content);
   }
 
   return entries.length;
