@@ -275,3 +275,7 @@ change. Explain the migration impact in the commit body and pull request.
 Contributors do not need to add a changeset or manually bump the package version.
 Leave version pull requests, publishing and release tags to the release workflow
 and maintainers. npm publishing uses GitHub OIDC trusted publishing.
+
+The 1.0 API currently releases as `1.0.0-preview.*` under npm's `preview` tag.
+Install it with `npm install bvault-js@preview`. The `latest` tag stays on the
+stable release until maintainers explicitly switch the release configuration.
