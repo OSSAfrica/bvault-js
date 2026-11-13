@@ -46,6 +46,9 @@ jobs:
           # Tegami reads commits back to the latest tag, so a shallow clone would
           # see no history and release nothing.
           fetch-depth: 0
+          # Tegami pushes with the App token supplied to the version step.
+          # Persisting checkout's default token can override those credentials.
+          persist-credentials: false
 
       # Work the version PR as the GitHub App rather than as the built-in
       # GITHUB_TOKEN. Anything GITHUB_TOKEN does is barred from triggering
@@ -76,12 +79,7 @@ jobs:
       # Runs before either outcome, so a version PR is never opened from a broken
       # tree and the publish job never starts from one.
       - name: Verify
-        run: |
-          npm run build
-          npm run check-format
-          npm run test:run
-          npx --no-install publint
-          npx --no-install attw --pack . --profile node16
+        run: npm run ci
 
       - name: Is a publish owed?
         id: state
@@ -119,9 +117,9 @@ jobs:
             echo "No open version PR; nothing to auto-merge."
             exit 0
           fi
-          # --auto waits for required checks when the repo has them; it errors if
-          # auto-merge is disabled in repo settings, in which case merge outright.
-          gh pr merge "$pr" --squash --auto || gh pr merge "$pr" --squash
+          # Repository auto-merge must be enabled. Surface configuration or
+          # permission failures rather than falling back to an immediate merge.
+          gh pr merge "$pr" --squash --auto
 
   publish:
     name: Publish to npm

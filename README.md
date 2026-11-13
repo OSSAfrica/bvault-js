@@ -67,6 +67,9 @@ encryption is the other mitigation worth having.
 npm install bvault-js
 ```
 
+bVault-js is ESM-only. Use `import` in ESM applications or `await import('bvault-js')`
+from CommonJS. Synchronous `require()` is not supported.
+
 ## Usage
 
 Initialize once at your application's entry point, then use the wrappers anywhere.
