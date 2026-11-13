@@ -24,8 +24,9 @@
  * because bvault-js ships to browsers and an `engines` entry would warn every
  * consumer installing on an older Node.
  */
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { format, resolveConfig } from 'prettier';
 import { tegami } from 'tegami';
 import { runCli } from 'tegami/cli';
 import { github } from 'tegami/plugins/github';
@@ -35,6 +36,13 @@ const PACKAGE_NAME = 'bvault-js';
 const CHANGELOG_DIR = '.tegami';
 
 const release = tegami({
+  // Keep the 1.0 API on an opt-in channel until the stable release is ready.
+  packages: {
+    'bvault-js': {
+      prerelease: 'preview',
+      npm: { distTag: 'preview' },
+    },
+  },
   // `conventionalCommits: true` is deliberately NOT set. It injects *virtual*
   // changelog entries on every draft, and because the git tag only advances at
   // publish time, the run after the version PR merges regenerates the very same
@@ -42,6 +50,19 @@ const release = tegami({
   // new commit. Materialising real files below avoids that: `draft.apply()`
   // consumes them, so they cannot be counted twice.
   plugins: [
+    {
+      name: 'format-release-changelog',
+      // Run before GitHub's applyCliDraft hook commits the generated files.
+      async applyCliDraft() {
+        const filepath = join(this.cwd, 'CHANGELOG.md');
+        const options = await resolveConfig(filepath);
+        const content = await readFile(filepath, 'utf8');
+        await writeFile(
+          filepath,
+          await format(content, { ...options, filepath }),
+        );
+      },
+    },
     github({
       repo: 'OSSAfrica/bvault-js',
       versionPr: { base: 'main' },
