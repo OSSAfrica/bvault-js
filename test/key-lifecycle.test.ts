@@ -37,6 +37,34 @@ describe('key destruction coordination', () => {
     expect(await hasKey()).toBe(true);
   });
 
+  it('still destroys safely if BroadcastChannel posting fails', async () => {
+    const original = Object.getOwnPropertyDescriptor(
+      window,
+      'BroadcastChannel',
+    );
+    resetSecureStorageState();
+    Object.defineProperty(window, 'BroadcastChannel', {
+      configurable: true,
+      value: class {
+        onmessage = null;
+        postMessage() {
+          throw new Error('channel unavailable');
+        }
+        close() {}
+      },
+    });
+    try {
+      await initializeSecureStorage();
+      await destroySecureStorage();
+      expect(await BVaultDB.getData('keys', 'storage-key')).toBeUndefined();
+      expect(isSecureStorageInitialized()).toBe(false);
+    } finally {
+      resetSecureStorageState();
+      if (original) Object.defineProperty(window, 'BroadcastChannel', original);
+      else Reflect.deleteProperty(window, 'BroadcastChannel');
+    }
+  });
+
   it('refuses initialization while another tab is destroying the key', async () => {
     localStorage.setItem(
       MARKER,

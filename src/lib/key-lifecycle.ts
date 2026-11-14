@@ -76,7 +76,12 @@ export function announceKeyDestruction(destroying: boolean): void {
   // A full origin must not silently leave another tab using a deleted key.
   globalThis.localStorage.setItem(MARKER, next);
   revision = next;
-  channel?.postMessage({ type: 'key-destroyed' });
+  try {
+    channel?.postMessage({ type: 'key-destroyed' });
+  } catch {
+    // The marker was written successfully; storage events and revision checks
+    // can still invalidate other tabs when BroadcastChannel fails.
+  }
 }
 
 export function stopWatchingKeyLifecycle(): void {
