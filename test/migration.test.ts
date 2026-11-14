@@ -79,11 +79,11 @@ describe('legacy data migration', () => {
   });
 
   it('is idempotent and silent on a second run', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     localStorage.setItem('token', 'bGVnYWN5');
     await clearLegacyData();
 
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warn.mockClear();
     expect(await clearLegacyData()).toBe(0);
     expect(warn).not.toHaveBeenCalled();
   });
