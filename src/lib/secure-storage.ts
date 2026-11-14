@@ -14,6 +14,7 @@ import {
 let isInitialized = false;
 let storageKey: CryptoKey | null = null;
 let keyLossReported = false;
+let initPromise: Promise<void> | null = null;
 
 const invalidateKey = (): void => {
   isInitialized = false;
@@ -91,6 +92,16 @@ export const initializeSecureStorage = async (): Promise<void> => {
   const revision = checkKeyLifecycle();
   if (isInitialized) return;
 
+  // Concurrent callers (StrictMode's double effect, two entry points) share one
+  // run. The promise is cleared when it settles, so a failure can be retried.
+  initPromise ??= runInitialization(revision).finally(() => {
+    initPromise = null;
+  });
+
+  await initPromise;
+};
+
+const runInitialization = async (revision: string | null): Promise<void> => {
   try {
     await clearLegacyData();
     await BVaultDB.initialize();
@@ -315,4 +326,5 @@ export const destroySecureStorage = async (): Promise<void> => {
 export const resetSecureStorageState = (): void => {
   invalidateKey();
   stopWatchingKeyLifecycle();
+  initPromise = null;
 };

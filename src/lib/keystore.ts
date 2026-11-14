@@ -38,7 +38,47 @@ const requestPersistence = async (): Promise<void> => {
 };
 
 /**
+ * The lookup or creation currently in flight, shared by concurrent callers so
+ * one tab never generates two keys.
+ */
+let pendingKey: Promise<CryptoKey> | null = null;
+
+/**
+ * Reads the stored key, or generates one and writes it with `add()`.
+ *
+ * `add()` is atomic across tabs: exactly one writer succeeds and every other
+ * gets a `ConstraintError`. The loser discards its own key and adopts the
+ * winner's, in a fresh transaction. Any other error propagates.
+ */
+const loadOrCreateKey = async (): Promise<CryptoKey> => {
+  const existing = await BVaultDB.getData<CryptoKey>(KEY_STORE, KEY_ID);
+  if (existing) return existing;
+
+  const key = await crypto.subtle.generateKey(KEY_ALGORITHM, false, [
+    'encrypt',
+    'decrypt',
+  ]);
+
+  try {
+    await BVaultDB.addData(KEY_STORE, key, KEY_ID);
+  } catch (error) {
+    if ((error as DOMException)?.name !== 'ConstraintError') throw error;
+
+    const winner = await BVaultDB.getData<CryptoKey>(KEY_STORE, KEY_ID);
+    if (!winner) throw error;
+    return winner;
+  }
+
+  await requestPersistence();
+  return key;
+};
+
+/**
  * Returns the stored encryption key, generating and persisting one on first use.
+ *
+ * Concurrent callers share one lookup, and across tabs the first write wins, so
+ * every caller ends up with the same persisted key. The key is cached only once
+ * its write has committed. A failed attempt is not cached, so callers can retry.
  *
  * The key is generated with `extractable: false`, so its raw bytes are never
  * exposed to JavaScript — `crypto.subtle.exportKey()` on it rejects. It is
@@ -49,22 +89,16 @@ const requestPersistence = async (): Promise<void> => {
 export const getOrCreateKey = async (): Promise<CryptoKey> => {
   if (cachedKey) return cachedKey;
 
-  const existing = await BVaultDB.getData<CryptoKey>(KEY_STORE, KEY_ID);
-  if (existing) {
-    cachedKey = existing;
-    return existing;
-  }
+  pendingKey ??= loadOrCreateKey()
+    .then((key) => {
+      cachedKey = key;
+      return key;
+    })
+    .finally(() => {
+      pendingKey = null;
+    });
 
-  const key = await crypto.subtle.generateKey(KEY_ALGORITHM, false, [
-    'encrypt',
-    'decrypt',
-  ]);
-
-  await BVaultDB.storeData(KEY_STORE, key, KEY_ID);
-  await requestPersistence();
-
-  cachedKey = key;
-  return key;
+  return pendingKey;
 };
 
 /**
@@ -86,7 +120,9 @@ export const hasKey = async (): Promise<boolean> => {
  * @returns {Promise<void>}
  */
 export const destroyKey = async (): Promise<void> => {
+  // shortcut: destroying while a key is being created in this tab can re-cache the old key.
   cachedKey = null;
+  pendingKey = null;
   await BVaultDB.deleteData(KEY_STORE, KEY_ID);
 };
 
@@ -98,4 +134,5 @@ export const destroyKey = async (): Promise<void> => {
  */
 export const resetKeyCache = (): void => {
   cachedKey = null;
+  pendingKey = null;
 };
