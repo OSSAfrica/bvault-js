@@ -1,3 +1,13 @@
+## bvault-js@1.0.0-preview.1 (preview)
+
+### Invalidate destroyed keys across browser tabs
+
+- fix(storage): invalidate destroyed keys across browser tabs
+
+- fix(storage): retain coordination when channel posting fails
+
+---
+
 ## bvault-js@1.0.0-preview.0 (preview)
 
 ### Format retained prerelease changelogs
