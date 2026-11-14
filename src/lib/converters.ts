@@ -36,10 +36,26 @@ export const base64ToBuffer = (base64: string): Uint8Array => {
   // Convert URL-safe base64 to standard base64
   let standardBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 
-  // Add padding if needed
-  const padding = standardBase64.length % 4;
-  if (padding) {
-    standardBase64 += '='.repeat(4 - padding);
+  // Reject invalid characters and padding before atob, whose validation differs
+  // between runtimes.
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(standardBase64)) {
+    throw new Error('Invalid base64 string');
+  }
+
+  const dataLength = standardBase64.replace(/=+$/, '').length;
+  const existingPadding = standardBase64.length - dataLength;
+  const requiredPadding = (4 - (dataLength % 4)) % 4;
+  if (
+    dataLength % 4 === 1 ||
+    (existingPadding > 0 &&
+      (standardBase64.length % 4 !== 0 || existingPadding !== requiredPadding))
+  ) {
+    throw new Error('Invalid base64 string');
+  }
+
+  // Add padding when the input is valid but unpadded.
+  if (existingPadding === 0 && requiredPadding > 0) {
+    standardBase64 += '='.repeat(requiredPadding);
   }
 
   const binaryString = atob(standardBase64);
