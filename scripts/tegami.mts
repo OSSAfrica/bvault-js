@@ -18,8 +18,9 @@
  * A hand-written file is merged with whatever the commits produced, and the
  * highest bump wins - so it can raise a version but never lower one.
  *
- * Run `npm run release` for the interactive local flow; CI runs the commands
- * directly. Requires Node 24+ (Tegami's floor). Note that this floor applies to
+ * Use release:version, release:stage, and release:finalize for the three phases.
+ * `npm run release` opens the interactive changelog editor.
+ * Requires Node 24+ (Tegami's floor). Note that this floor applies to
  * the release scripts only - it is deliberately not declared in `engines`,
  * because bvault-js ships to browsers and an `engines` entry would warn every
  * consumer installing on an older Node.
@@ -30,6 +31,12 @@ import { format, resolveConfig } from 'prettier';
 import { tegami } from 'tegami';
 import { runCli } from 'tegami/cli';
 import { github } from 'tegami/plugins/github';
+import {
+  assertApprovedPreview,
+  PREVIEW_TAG,
+  stagePreview,
+  withPackedPreview,
+} from './npm-staging.mts';
 
 /** The single published package in this workspace. */
 const PACKAGE_NAME = 'bvault-js';
@@ -45,7 +52,7 @@ const release = tegami({
   packages: {
     'bvault-js': {
       prerelease: 'preview',
-      npm: { distTag: 'preview' },
+      npm: { distTag: PREVIEW_TAG },
     },
   },
   // `conventionalCommits: true` is deliberately NOT set. It injects *virtual*
@@ -143,10 +150,27 @@ async function materializeCommitChangelogs(): Promise<number> {
  * would carry on versioning. Print the status instead (`pending` means a
  * publish is owed); any failure then surfaces as a non-zero exit.
  */
-if (process.argv[2] === 'check-publish') {
+const command = process.argv[2];
+if (
+  command !== undefined &&
+  !['stage', 'check-publish', 'version', 'publish', '--help', '-h'].includes(
+    command,
+  )
+) {
+  throw new Error('Use release:version, release:stage, or release:finalize.');
+}
+if (command === 'stage') {
+  await stagePreview();
+} else if (command === 'check-publish') {
   const { status } = await release.getPublishStatus();
   console.log(status);
 } else {
+  // npm approval is the only publication gate. Tegami may only finish tags
+  // and GitHub releases after these exact package bytes are publicly available.
+  // Its npm task then skips the version that is already published.
+  if (command === 'publish') {
+    await withPackedPreview(assertApprovedPreview);
+  }
   await runCli(release, {
     async version() {
       const count = await materializeCommitChangelogs();
