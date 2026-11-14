@@ -64,11 +64,17 @@ encryption is the other mitigation worth having.
 ## Installation
 
 ```bash
-npm install bvault-js
+npm install bvault-js@preview
 ```
 
 bVault-js is ESM-only. Use `import` in ESM applications or `await import('bvault-js')`
 from CommonJS. Synchronous `require()` is not supported.
+
+## Try the browser playground
+
+The [working example](examples/browser/README.md) lets you initialize a vault,
+store a JSON object, inspect the ciphertext, reload and read it, then destroy it.
+From a checkout, run `npm ci` and `npm run example`.
 
 ## Usage
 

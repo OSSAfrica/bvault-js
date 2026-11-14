@@ -3,3 +3,6 @@ dist
 bvault-js-*.tgz
 .idea/
 .DS_Store
+
+playwright-report/
+test-results/

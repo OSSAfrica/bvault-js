@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bVault · Browser storage, encrypted</title>
+    <link rel="stylesheet" href="/examples/browser/styles.css" />
+    <script type="importmap">
+      { "imports": { "bvault-js": "/dist/bvault.min.js" } }
+    </script>
+    <script type="module" src="/examples/browser/main.js"></script>
+  </head>
+  <body>
+    <main>
+      <header class="masthead">
+        <a class="wordmark" href="https://github.com/OSSAfrica/bvault-js"
+          >bVault<span> / </span>playground</a
+        >
+        <span class="edition">1.0 API · preview</span>
+      </header>
+      <section class="intro" aria-labelledby="title">
+        <p class="eyebrow">YOUR BROWSER. YOUR KEY.</p>
+        <h1 id="title">See what your<br />browser stores.</h1>
+        <p class="lede">
+          Write an object. Inspect the ciphertext. Read it back.<br />The
+          encryption key stays in this browser.
+        </p>
+      </section>
+      <div class="workbench">
+        <section class="editor" aria-labelledby="input-title">
+          <div class="section-heading">
+            <span class="step">01</span>
+            <h2 id="input-title">Your data</h2>
+          </div>
+          <label for="storage-key">Storage key</label>
+          <input
+            id="storage-key"
+            value="profile"
+            autocomplete="off"
+            maxlength="200"
+          />
+          <label for="value">JSON object</label>
+          <textarea id="value" rows="8" spellcheck="false">
+{
+  "name": "Ada",
+  "role": "builder"
+}</textarea
+          >
+          <button id="initialize" type="button">
+            Initialize vault <span aria-hidden="true">↗</span>
+          </button>
+          <div class="actions">
+            <button id="save" type="button" class="secondary" disabled>
+              Encrypt &amp; save
+            </button>
+            <button id="read" type="button" class="secondary" disabled>
+              Read &amp; decrypt
+            </button>
+          </div>
+          <p id="status" role="status" aria-live="polite">
+            Ready when you are. Initialize the vault to begin.
+          </p>
+        </section>
+        <section class="inspector" aria-labelledby="output-title">
+          <div class="section-heading">
+            <span class="step">02</span>
+            <h2 id="output-title">Inside storage</h2>
+            <span id="state" class="state">Not initialized</span>
+          </div>
+          <div class="output-label">
+            <h3>Raw localStorage value</h3>
+            <span>AES-GCM ciphertext</span>
+          </div>
+          <pre id="ciphertext" tabindex="0">Nothing stored under this key.</pre>
+          <div class="output-label">
+            <h3>Decrypted value</h3>
+            <span>After you click Read</span>
+          </div>
+          <pre id="plaintext" tabindex="0">
+Your decrypted JSON will appear here.</pre
+          >
+          <p class="reload-note">
+            Try reloading this page. Initialize again, then read: the same key
+            is loaded from IndexedDB.
+          </p>
+        </section>
+      </div>
+      <section class="footnotes" aria-label="About this demo">
+        <div>
+          <h2>A key you can use, but cannot export.</h2>
+          <p>
+            bVault stores a non-extractable AES-GCM key in IndexedDB. This
+            protects copied storage; scripts already running on this origin can
+            still use the key.
+          </p>
+        </div>
+        <div class="destroy">
+          <h2>Start over</h2>
+          <p>
+            Destroying the vault deletes its key and all bVault values on this
+            origin. This cannot be undone.
+          </p>
+          <button id="destroy" type="button" class="danger" disabled>
+            Destroy vault
+          </button>
+        </div>
+      </section>
+      <footer>
+        <span>Built with Web Crypto. No password required.</span
+        ><a href="https://github.com/OSSAfrica/bvault-js"
+          >Source &amp; documentation ↗</a
+        >
+      </footer>
+    </main>
+  </body>
+</html>

@@ -4,3 +4,6 @@
 ^https://wakatime\.com/badge/user/[^/]+/project/[^/.]+$
 # developercertificate.org times out from GitHub-hosted runners (reachable elsewhere)
 ^https://developercertificate\.org/?$
+
+# The local demo runs only while npm run example or Playwright starts its server.
+^http://127\.0\.0\.1:4173/

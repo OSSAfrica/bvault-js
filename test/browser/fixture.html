@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bVault browser tests</title>
+  </head>
+  <body>
+    <script type="module">
+      import * as bvault from '/dist/bvault.min.js';
+      window.bvault = bvault;
+      window.readStoredKey = () =>
+        new Promise((resolve, reject) => {
+          const open = indexedDB.open('bvault');
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const db = open.result;
+            const tx = db.transaction('keys', 'readonly');
+            const request = tx.objectStore('keys').get('storage-key');
+            tx.oncomplete = () => {
+              db.close();
+              resolve(request.result);
+            };
+            tx.onabort = () => {
+              db.close();
+              reject(tx.error);
+            };
+          };
+        });
+    </script>
+  </body>
+</html>

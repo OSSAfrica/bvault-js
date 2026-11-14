@@ -44,6 +44,23 @@ npm test
 `npm install` runs the package's `prepare` script to compile TypeScript. `npm test`
 starts Vitest in watch mode; use `npm run test:run` for a single run.
 
+For real-browser checks, install Playwright's browsers once, then run:
+
+```sh
+npx playwright install --with-deps chromium firefox webkit
+npm run test:browser
+```
+
+This builds the ESM browser bundle and runs the storage and example tests in
+Chromium, Firefox and WebKit. Use `-- --project=firefox` to run one engine.
+CI runs all three engines on each PR and retains traces and screenshots on
+failure. These tests use native Web Crypto and IndexedDB, without polyfills.
+Headless Firefox denies the optional persistent-storage permission so its
+permission prompt cannot stall initialization; keys still persist in IndexedDB
+across reloads in that browser context.
+
+Run `npm run example` for the [browser playground](examples/browser/README.md).
+
 ## Current design
 
 Development targets the 1.0 browser-storage API described in

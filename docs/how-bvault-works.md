@@ -377,8 +377,6 @@ has an issue open for contributors.
 - **Values come back as strings ([#15](https://github.com/OSSAfrica/bvault-js/issues/15)).** Objects need `JSON.parse`. `undefined`
   becomes the string `"undefined"`. `Date`, `Map` and similar types lose their
   type.
-- **Tests run in jsdom with `fake-indexeddb` ([#18](https://github.com/OSSAfrica/bvault-js/issues/18)).** Nothing yet checks how real
-  Chromium, Firefox or WebKit store non-extractable keys.
 - **Web Storage limits still apply.** Web Storage is synchronous, limited to
   about 5 MB per origin, and not shared with Web Workers. Encryption and base64
   add 29 bytes (header, IV and tag) to each value, then make it about a third larger.
