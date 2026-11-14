@@ -31,6 +31,7 @@ import { format, resolveConfig } from 'prettier';
 import { tegami } from 'tegami';
 import { runCli } from 'tegami/cli';
 import { github } from 'tegami/plugins/github';
+import { normalizeCommitChangelog } from './release-changelog.mts';
 import {
   assertApprovedPreview,
   PREVIEW_TAG,
@@ -86,34 +87,9 @@ const release = tegami({
 });
 
 /**
- * Drop git trailers from a generated changelog body.
- *
- * Entries are materialised from commit messages verbatim, so every trailer the
- * commit carried - `Signed-off-by:` from the DCO check, and any tooling that
- * stamps its own - would otherwise be published to npm inside CHANGELOG.md.
- * Trailers are metadata about the commit, not release notes.
- *
- * `Refs`/`Closes`/`Fixes` are deliberately kept: they point at issues a reader
- * of the changelog may genuinely want.
- */
-const DROPPED_TRAILER =
-  /^(?:signed-off-by|co-authored-by|claude-session|reviewed-by|reported-by|tested-by|acked-by|cc):[ \t].*$/gim;
-
-function stripTrailers(content: string): string {
-  return content.replace(DROPPED_TRAILER, '').replace(/\n{3,}(?=\n*$)/, '\n');
-}
-
-/**
- * Turn conventional commits since the last tag into real changelog files.
- *
- * Tegami resolves a commit's affected packages from its scope, so an *unscoped*
- * `fix: ...` resolves to no package and releases nothing - and this repo's
- * history is unscoped throughout. In a single-package workspace the target is
- * never ambiguous, so an entry that names no package is pointed at this one.
- *
- * The rewrite uses the implicit style (`packages: ["bvault-js"]`), which lets
- * Tegami keep deriving the bump from heading depth in the generated body rather
- * than us recomputing it.
+ * Materialize conventional commits as real changelog files. This repository
+ * ships one package, so both component scopes (storage, docs) and unscoped
+ * commits target bvault-js. Heading depth retains Tegami's computed bump.
  */
 async function materializeCommitChangelogs(): Promise<number> {
   // Never write while a publish is still owed: the lock is mid-flight, the tag
@@ -128,14 +104,7 @@ async function materializeCommitChangelogs(): Promise<number> {
   await mkdir(CHANGELOG_DIR, { recursive: true });
 
   for (const entry of entries) {
-    const unscoped = Object.keys(entry.packages).length === 0;
-    const stripped = stripTrailers(entry.content);
-    const content = unscoped
-      ? stripped.replace(
-          /^---\npackages: \{\}\n---\n/,
-          `---\npackages: ["${PACKAGE_NAME}"]\n---\n`,
-        )
-      : stripped;
+    const content = normalizeCommitChangelog(entry.content, PACKAGE_NAME);
 
     // Prereleases retain this source for replay into the stable changelog.
     await writeFormattedMarkdown(join(CHANGELOG_DIR, entry.filename), content);
