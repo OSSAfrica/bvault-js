@@ -274,7 +274,23 @@ change. Explain the migration impact in the commit body and pull request.
 
 Contributors do not need to add a changeset or manually bump the package version.
 Leave version pull requests, publishing and release tags to the release workflow
-and maintainers. npm publishing uses GitHub OIDC trusted publishing.
+and maintainers. GitHub OIDC trusted publishing grants **staging only**:
+
+1. After a version PR merges, the Release workflow validates the package and runs
+   `npm run release:stage`. The `release` environment restricts staging to `main`
+   and has no reviewer gate. No npm token or direct publish permission is needed.
+2. A maintainer reviews the package in their npm account's **Staged Packages** tab
+   and approves it with 2FA. This approval publishes the package on npm.
+3. On GitHub, manually run the **Release** workflow on `main`, supplying the full
+   `release_commit` SHA printed in the staging run's summary. It checks out that
+   exact commit, verifies that npm's public tarball matches it and has the
+   `preview` tag, then creates the GitHub tag and prerelease. This job has no npm
+   credentials or OIDC permission.
+
+Staging does not create release tags or a GitHub release. Finalization fails if
+npm approval is still pending, the tarball differs, or `latest` points to the
+preview. To finalize locally after building, use `npm run release:finalize`;
+the same approval checks apply.
 
 The 1.0 API currently releases as `1.0.0-preview.*` under npm's `preview` tag.
 Install it with `npm install bvault-js@preview`. The `latest` tag stays on the

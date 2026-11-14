@@ -24,7 +24,8 @@
     "bundle": "esbuild dist/index.js --bundle --minify --outfile=dist/bvault.min.js",
     "release": "node scripts/tegami.mts",
     "release:version": "node scripts/tegami.mts version",
-    "release:publish": "node scripts/tegami.mts publish",
+    "release:stage": "node scripts/tegami.mts stage",
+    "release:finalize": "node scripts/tegami.mts publish",
     "release:check": "node scripts/tegami.mts check-publish",
     "check-package": "publint && attw --pack . --profile esm-only"
   },
