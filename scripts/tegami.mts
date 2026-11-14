@@ -18,23 +18,44 @@
  * A hand-written file is merged with whatever the commits produced, and the
  * highest bump wins - so it can raise a version but never lower one.
  *
- * Run `npm run release` for the interactive local flow; CI runs the commands
- * directly. Requires Node 24+ (Tegami's floor). Note that this floor applies to
+ * Use release:version, release:stage, and release:finalize for the three phases.
+ * `npm run release` opens the interactive changelog editor.
+ * Requires Node 24+ (Tegami's floor). Note that this floor applies to
  * the release scripts only - it is deliberately not declared in `engines`,
  * because bvault-js ships to browsers and an `engines` entry would warn every
  * consumer installing on an older Node.
  */
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { format, resolveConfig } from 'prettier';
 import { tegami } from 'tegami';
 import { runCli } from 'tegami/cli';
 import { github } from 'tegami/plugins/github';
+import { normalizeCommitChangelog } from './release-changelog.mts';
+import {
+  assertApprovedPreview,
+  PREVIEW_TAG,
+  stagePreview,
+  withPackedPreview,
+} from './npm-staging.mts';
 
 /** The single published package in this workspace. */
 const PACKAGE_NAME = 'bvault-js';
 const CHANGELOG_DIR = '.tegami';
 
+async function writeFormattedMarkdown(filepath: string, content: string) {
+  const options = await resolveConfig(filepath);
+  await writeFile(filepath, await format(content, { ...options, filepath }));
+}
+
 const release = tegami({
+  // Keep the 1.0 API on an opt-in channel until the stable release is ready.
+  packages: {
+    'bvault-js': {
+      prerelease: 'preview',
+      npm: { distTag: PREVIEW_TAG },
+    },
+  },
   // `conventionalCommits: true` is deliberately NOT set. It injects *virtual*
   // changelog entries on every draft, and because the git tag only advances at
   // publish time, the run after the version PR merges regenerates the very same
@@ -42,6 +63,15 @@ const release = tegami({
   // new commit. Materialising real files below avoids that: `draft.apply()`
   // consumes them, so they cannot be counted twice.
   plugins: [
+    {
+      name: 'format-release-changelog',
+      // Run before GitHub's applyCliDraft hook commits the generated files.
+      async applyCliDraft() {
+        const filepath = join(this.cwd, 'CHANGELOG.md');
+        const content = await readFile(filepath, 'utf8');
+        await writeFormattedMarkdown(filepath, content);
+      },
+    },
     github({
       repo: 'OSSAfrica/bvault-js',
       versionPr: { base: 'main' },
@@ -57,34 +87,9 @@ const release = tegami({
 });
 
 /**
- * Drop git trailers from a generated changelog body.
- *
- * Entries are materialised from commit messages verbatim, so every trailer the
- * commit carried - `Signed-off-by:` from the DCO check, and any tooling that
- * stamps its own - would otherwise be published to npm inside CHANGELOG.md.
- * Trailers are metadata about the commit, not release notes.
- *
- * `Refs`/`Closes`/`Fixes` are deliberately kept: they point at issues a reader
- * of the changelog may genuinely want.
- */
-const DROPPED_TRAILER =
-  /^(?:signed-off-by|co-authored-by|claude-session|reviewed-by|reported-by|tested-by|acked-by|cc):[ \t].*$/gim;
-
-function stripTrailers(content: string): string {
-  return content.replace(DROPPED_TRAILER, '').replace(/\n{3,}(?=\n*$)/, '\n');
-}
-
-/**
- * Turn conventional commits since the last tag into real changelog files.
- *
- * Tegami resolves a commit's affected packages from its scope, so an *unscoped*
- * `fix: ...` resolves to no package and releases nothing - and this repo's
- * history is unscoped throughout. In a single-package workspace the target is
- * never ambiguous, so an entry that names no package is pointed at this one.
- *
- * The rewrite uses the implicit style (`packages: ["bvault-js"]`), which lets
- * Tegami keep deriving the bump from heading depth in the generated body rather
- * than us recomputing it.
+ * Materialize conventional commits as real changelog files. This repository
+ * ships one package, so both component scopes (storage, docs) and unscoped
+ * commits target bvault-js. Heading depth retains Tegami's computed bump.
  */
 async function materializeCommitChangelogs(): Promise<number> {
   // Never write while a publish is still owed: the lock is mid-flight, the tag
@@ -99,16 +104,10 @@ async function materializeCommitChangelogs(): Promise<number> {
   await mkdir(CHANGELOG_DIR, { recursive: true });
 
   for (const entry of entries) {
-    const unscoped = Object.keys(entry.packages).length === 0;
-    const stripped = stripTrailers(entry.content);
-    const content = unscoped
-      ? stripped.replace(
-          /^---\npackages: \{\}\n---\n/,
-          `---\npackages: ["${PACKAGE_NAME}"]\n---\n`,
-        )
-      : stripped;
+    const content = normalizeCommitChangelog(entry.content, PACKAGE_NAME);
 
-    await writeFile(join(CHANGELOG_DIR, entry.filename), content);
+    // Prereleases retain this source for replay into the stable changelog.
+    await writeFormattedMarkdown(join(CHANGELOG_DIR, entry.filename), content);
   }
 
   return entries.length;
@@ -120,10 +119,27 @@ async function materializeCommitChangelogs(): Promise<number> {
  * would carry on versioning. Print the status instead (`pending` means a
  * publish is owed); any failure then surfaces as a non-zero exit.
  */
-if (process.argv[2] === 'check-publish') {
+const command = process.argv[2];
+if (
+  command !== undefined &&
+  !['stage', 'check-publish', 'version', 'publish', '--help', '-h'].includes(
+    command,
+  )
+) {
+  throw new Error('Use release:version, release:stage, or release:finalize.');
+}
+if (command === 'stage') {
+  await stagePreview();
+} else if (command === 'check-publish') {
   const { status } = await release.getPublishStatus();
   console.log(status);
 } else {
+  // npm approval is the only publication gate. Tegami may only finish tags
+  // and GitHub releases after these exact package bytes are publicly available.
+  // Its npm task then skips the version that is already published.
+  if (command === 'publish') {
+    await withPackedPreview(assertApprovedPreview);
+  }
   await runCli(release, {
     async version() {
       const count = await materializeCommitChangelogs();

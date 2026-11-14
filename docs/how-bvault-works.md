@@ -50,6 +50,7 @@ end
 
 subgraph group_persistence["Key Persistence"]
   node_keystore["Key Store<br/>[keystore.ts]"]
+  node_key_lifecycle["Cross-tab Invalidation<br/>[key-lifecycle.ts]"]
   node_bvault_db["Database Wrapper<br/>[bvault-db.ts]"]
   node_indexeddb[("IndexedDB")]
   node_storage_manager{{"Storage Manager"}}
@@ -70,6 +71,8 @@ node_secure_storage -->|"loads key"| node_keystore
 node_secure_storage -->|"clears"| node_local_wrapper
 node_secure_storage -->|"clears"| node_session_wrapper
 node_secure_storage -->|"destroys key"| node_keystore
+node_secure_storage -->|"coordinates destruction"| node_key_lifecycle
+node_key_lifecycle -->|"stores revision marker"| node_local_storage
 node_local_wrapper -->|"encrypts/decrypts"| node_crypto_engine
 node_session_wrapper -->|"encrypts/decrypts"| node_crypto_engine
 node_local_wrapper -->|"reads/writes"| node_local_storage
@@ -184,6 +187,13 @@ and a `toJSON()` method for logging.
   permanently unreadable.
 - `hasKey()` and `resetKeyCache()` are used by the tests.
 
+### `src/lib/key-lifecycle.ts`
+
+Tracks key-destruction revisions without serializing key material. BroadcastChannel
+and `storage` events invalidate other tabs; synchronous checks against the
+`bvault:key-lifecycle` marker catch a missed event when a tab resumes. A temporary
+`destroying` marker prevents initialization from adopting a key being deleted.
+
 ### `src/lib/bvault-db.ts`
 
 A small promise wrapper around IndexedDB. It opens database `bvault` at schema
@@ -223,8 +233,15 @@ sequenceDiagram
     IDB-->>KS: CryptoKey
   else first run
     KS->>WC: generateKey(AES-GCM-256, extractable=false)
-    KS->>IDB: put keys/storage-key
-    KS->>KS: navigator.storage.persist()
+    KS->>IDB: add keys/storage-key (resolves once the transaction commits)
+    alt another caller or tab wrote first
+      IDB-->>KS: ConstraintError
+      KS->>IDB: get keys/storage-key (fresh transaction)
+      IDB-->>KS: CryptoKey from the winning writer
+      Note over KS: the generated key is discarded
+    else this caller won
+      KS->>KS: navigator.storage.persist()
+    end
   end
   KS-->>SS: CryptoKey handle (cached in memory)
 ```
@@ -266,6 +283,16 @@ a one-time warning that the key may have been cleared or evicted.
 `destroySecureStorage()` removes every `bv1:` entry from both storages, deletes
 the key from IndexedDB, and resets the in-memory state. Use it for logout or
 when switching accounts. Nothing can be recovered afterwards.
+
+Other tabs reset both their active key and key cache, clear their own bVault
+session values, and reject reads/writes until reinitialized. Async operations
+recheck their key after cryptography completes, preventing a stale write from
+persisting after destruction. Initialization also verifies that the key revision
+did not change while it was loading.
+
+The localStorage revision marker contains an ID and destruction state, never key
+bytes. If it cannot be written, destruction rejects before deleting the IndexedDB
+key. The caller must handle that failure. Unrelated storage entries are preserved.
 
 ## Payload format
 
@@ -364,8 +391,6 @@ has an issue open for contributors.
   AES-GCM as additional authenticated data. Someone who can _write_ to storage
   can move a valid ciphertext from one key to another (for example, copy
   `bv1:a` over `bv1:b`), or restore an old value, and it will still decrypt.
-- **`destroySecureStorage()` isn't broadcast ([#9](https://github.com/OSSAfrica/bvault-js/issues/9)).** Other open tabs keep the old key
-  in memory and keep writing values that no key can decrypt.
 - **IndexedDB `blocked` and `versionchange` events aren't handled ([#10](https://github.com/OSSAfrica/bvault-js/issues/10)).** A tab
   running an older version can make initialization hang. If the schema check
   finds a store missing, the whole database is deleted, and the key goes with
@@ -375,8 +400,6 @@ has an issue open for contributors.
 - **Values come back as strings ([#15](https://github.com/OSSAfrica/bvault-js/issues/15)).** Objects need `JSON.parse`. `undefined`
   becomes the string `"undefined"`. `Date`, `Map` and similar types lose their
   type.
-- **Tests run in jsdom with `fake-indexeddb` ([#18](https://github.com/OSSAfrica/bvault-js/issues/18)).** Nothing yet checks how real
-  Chromium, Firefox or WebKit store non-extractable keys.
 - **Web Storage limits still apply.** Web Storage is synchronous, limited to
   about 5 MB per origin, and not shared with Web Workers. Encryption and base64
   add 29 bytes (header, IV and tag) to each value, then make it about a third larger.

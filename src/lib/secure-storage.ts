@@ -4,11 +4,36 @@ import { decryptWithKey, encryptWithKey } from './crypto.js';
 import { EncryptionError, DecryptionError } from './errors.js';
 import { getOrCreateKey, destroyKey, resetKeyCache } from './keystore.js';
 import { clearLegacyData } from './migration.js';
+import {
+  announceKeyDestruction,
+  checkKeyLifecycle,
+  stopWatchingKeyLifecycle,
+  watchKeyLifecycle,
+} from './key-lifecycle.js';
 
 let isInitialized = false;
 let storageKey: CryptoKey | null = null;
 let keyLossReported = false;
 let initPromise: Promise<void> | null = null;
+
+const invalidateKey = (): void => {
+  isInitialized = false;
+  storageKey = null;
+  keyLossReported = false;
+  resetKeyCache();
+};
+
+const watchLifecycle = (): void => {
+  watchKeyLifecycle(() => {
+    invalidateKey();
+    // sessionStorage belongs to this tab, so the destroying tab cannot clear it.
+    try {
+      secureSessionStorage.clear();
+    } catch {
+      // Key handles have already been invalidated if storage access is denied.
+    }
+  });
+};
 
 /**
  * Prefix applied to every key bVault writes.
@@ -63,22 +88,26 @@ const getStorage = (target: 'local' | 'session'): Storage => {
  * @throws {Error} If the key cannot be loaded or generated.
  */
 export const initializeSecureStorage = async (): Promise<void> => {
+  watchLifecycle();
+  const revision = checkKeyLifecycle();
   if (isInitialized) return;
 
   // Concurrent callers (StrictMode's double effect, two entry points) share one
   // run. The promise is cleared when it settles, so a failure can be retried.
-  initPromise ??= runInitialization().finally(() => {
+  initPromise ??= runInitialization(revision).finally(() => {
     initPromise = null;
   });
 
   await initPromise;
 };
 
-const runInitialization = async (): Promise<void> => {
+const runInitialization = async (revision: string | null): Promise<void> => {
   try {
     await clearLegacyData();
     await BVaultDB.initialize();
-    storageKey = await getOrCreateKey();
+    const key = await getOrCreateKey();
+    checkKeyLifecycle(revision);
+    storageKey = key;
     isInitialized = true;
   } catch (error) {
     const caughtError = error as Error;
@@ -93,6 +122,7 @@ const runInitialization = async (): Promise<void> => {
  * Returns the active key, or throws if the library has not been initialized.
  */
 const requireKey = (): CryptoKey => {
+  checkKeyLifecycle();
   if (!isInitialized || !storageKey) {
     throw new Error(
       'Secure storage not initialized. Call initializeSecureStorage() first.',
@@ -150,6 +180,13 @@ function createSecureSetItem(target: 'local' | 'session') {
       });
     }
 
+    // Encryption yields to the browser. Destruction may have happened while
+    // it was running, so never persist ciphertext under that stale handle.
+    if (requireKey() !== cryptoKey) {
+      throw new Error(
+        'Secure storage key changed. Initialize again before writing.',
+      );
+    }
     getStorage(target).setItem(KEY_PREFIX + key, payload);
   };
 }
@@ -168,8 +205,9 @@ function createSecureGetItem(target: 'local' | 'session') {
     const payload = getStorage(target).getItem(KEY_PREFIX + key);
     if (payload === null) return null;
 
+    let value: string;
     try {
-      return await decryptWithKey(payload, cryptoKey);
+      value = await decryptWithKey(payload, cryptoKey);
     } catch (error) {
       if (error instanceof DecryptionError) {
         console.error(`Decryption failed for key "${key}":`, error.message);
@@ -179,6 +217,12 @@ function createSecureGetItem(target: 'local' | 'session') {
       }
       return null;
     }
+    if (requireKey() !== cryptoKey) {
+      throw new Error(
+        'Secure storage key changed. Initialize again before reading.',
+      );
+    }
+    return value;
   };
 }
 
@@ -240,7 +284,14 @@ export const secureSessionStorage = {
  *
  * @returns {boolean}
  */
-export const isSecureStorageInitialized = (): boolean => isInitialized;
+export const isSecureStorageInitialized = (): boolean => {
+  try {
+    checkKeyLifecycle();
+    return isInitialized;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * Deletes the encryption key and every value stored under it.
@@ -251,12 +302,19 @@ export const isSecureStorageInitialized = (): boolean => isInitialized;
  * @returns {Promise<void>}
  */
 export const destroySecureStorage = async (): Promise<void> => {
+  watchLifecycle();
   secureLocalStorage.clear();
   secureSessionStorage.clear();
-  await destroyKey();
-  storageKey = null;
-  isInitialized = false;
-  keyLossReported = false;
+  announceKeyDestruction(true);
+  invalidateKey();
+  try {
+    await destroyKey();
+  } finally {
+    announceKeyDestruction(false);
+    // Also remove writes that raced an overlapping destruction in another tab.
+    secureLocalStorage.clear();
+    secureSessionStorage.clear();
+  }
 };
 
 /**
@@ -266,9 +324,7 @@ export const destroySecureStorage = async (): Promise<void> => {
  * @internal
  */
 export const resetSecureStorageState = (): void => {
-  isInitialized = false;
-  storageKey = null;
-  keyLossReported = false;
+  invalidateKey();
+  stopWatchingKeyLifecycle();
   initPromise = null;
-  resetKeyCache();
 };

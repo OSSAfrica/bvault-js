@@ -120,7 +120,7 @@ export const hasKey = async (): Promise<boolean> => {
  * @returns {Promise<void>}
  */
 export const destroyKey = async (): Promise<void> => {
-  // shortcut: destroying while a key is being created can re-cache the old key; tab coordination is #9.
+  // shortcut: destroying while a key is being created in this tab can re-cache the old key.
   cachedKey = null;
   pendingKey = null;
   await BVaultDB.deleteData(KEY_STORE, KEY_ID);

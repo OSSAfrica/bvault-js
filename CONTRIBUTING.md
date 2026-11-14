@@ -44,6 +44,23 @@ npm test
 `npm install` runs the package's `prepare` script to compile TypeScript. `npm test`
 starts Vitest in watch mode; use `npm run test:run` for a single run.
 
+For real-browser checks, install Playwright's browsers once, then run:
+
+```sh
+npx playwright install --with-deps chromium firefox webkit
+npm run test:browser
+```
+
+This builds the ESM browser bundle and runs the storage and example tests in
+Chromium, Firefox and WebKit. Use `-- --project=firefox` to run one engine.
+CI runs all three engines on each PR and retains traces and screenshots on
+failure. These tests use native Web Crypto and IndexedDB, without polyfills.
+Headless Firefox denies the optional persistent-storage permission so its
+permission prompt cannot stall initialization; keys still persist in IndexedDB
+across reloads in that browser context.
+
+Run `npm run example` for the [browser playground](examples/browser/README.md).
+
 ## Current design
 
 Development targets the 1.0 browser-storage API described in
@@ -193,13 +210,17 @@ npm run ci
 git diff --check
 ```
 
-`npm run ci` compiles TypeScript, checks Prettier formatting and runs Vitest once.
+`npm run ci` compiles TypeScript, checks Prettier formatting, runs Vitest once and
+validates the packed package with publint and Are the Types Wrong?. The package
+is ESM-only, so type validation uses the `esm-only` profile. It checks Node ESM
+and bundler resolution; synchronous CommonJS `require()` is unsupported.
 You can also run the checks individually:
 
 ```sh
 npm run build
 npm run check-format
 npm run test:run
+npm run check-package
 ```
 
 - Follow the existing TypeScript style and use Prettier for files you change.
@@ -270,4 +291,24 @@ change. Explain the migration impact in the commit body and pull request.
 
 Contributors do not need to add a changeset or manually bump the package version.
 Leave version pull requests, publishing and release tags to the release workflow
-and maintainers. npm publishing uses GitHub OIDC trusted publishing.
+and maintainers. GitHub OIDC trusted publishing grants **staging only**:
+
+1. After a version PR merges, the Release workflow validates the package and runs
+   `npm run release:stage`. The `release` environment restricts staging to `main`
+   and has no reviewer gate. No npm token or direct publish permission is needed.
+2. A maintainer reviews the package in their npm account's **Staged Packages** tab
+   and approves it with 2FA. This approval publishes the package on npm.
+3. On GitHub, manually run the **Release** workflow on `main`, supplying the full
+   `release_commit` SHA printed in the staging run's summary. It checks out that
+   exact commit, verifies that npm's public tarball matches it and has the
+   `preview` tag, then creates the GitHub tag and prerelease. This job has no npm
+   credentials or OIDC permission.
+
+Staging does not create release tags or a GitHub release. Finalization fails if
+npm approval is still pending, the tarball differs, or `latest` points to the
+preview. To finalize locally after building, use `npm run release:finalize`;
+the same approval checks apply.
+
+The 1.0 API currently releases as `1.0.0-preview.*` under npm's `preview` tag.
+Install it with `npm install bvault-js@preview`. The `latest` tag stays on the
+stable release until maintainers explicitly switch the release configuration.

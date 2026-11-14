@@ -1,0 +1,12 @@
+core:changelogs:
+  - content: "---\npackages:\n  bvault-js:\n    type: patch\n---\n\n### Invalidate destroyed keys across browser tabs\n\n- fix(storage): invalidate destroyed keys across browser tabs\n\n- fix(storage): retain coordination when channel posting fails\n\n---\n"
+    filename: 2026-11-14-mwfr20y3.md
+    v: 0.0.0
+core:packages:
+  - changelogIds:
+      - 2026-11-14-mwfr20y3.md
+    id: npm:bvault-js
+    updated: true
+npm:packages:
+  - distTag: preview
+    id: npm:bvault-js

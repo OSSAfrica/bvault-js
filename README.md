@@ -64,8 +64,17 @@ encryption is the other mitigation worth having.
 ## Installation
 
 ```bash
-npm install bvault-js
+npm install bvault-js@preview
 ```
+
+bVault-js is ESM-only. Use `import` in ESM applications or `await import('bvault-js')`
+from CommonJS. Synchronous `require()` is not supported.
+
+## Try the browser playground
+
+The [working example](examples/browser/README.md) lets you initialize a vault,
+store a JSON object, inspect the ciphertext, reload and read it, then destroy it.
+From a checkout, run `npm ci` and `npm run example`.
 
 ## Usage
 
@@ -255,12 +264,24 @@ to other libraries.
 Deletes the key and every value stored under it. Intended for logout or account switching. There is
 no recovery path.
 
+Other open tabs invalidate their cached key and clear their bVault session values.
+Their next read or write rejects until they call `initializeSecureStorage()` again.
+A write already encrypting when destruction occurs is rejected before storage is
+updated. BroadcastChannel and storage events notify active tabs; a small
+`bvault:key-lifecycle` marker also lets resumed tabs detect a missed notification.
+No key material is included in these messages or the marker.
+
+Destruction can reject with a storage error if the coordination marker cannot be
+written. In that case the IndexedDB key is not deleted; handle the error and retry
+rather than assuming logout cleanup succeeded.
+
 ### `isSecureStorageInitialized(): boolean`
 
 ### Errors
 
 `EncryptionError` and `DecryptionError` are exported. `setItem` throws `EncryptionError` when
-encryption fails; `getItem` returns `null` rather than throwing.
+encryption fails; `getItem` returns `null` on decryption failure. Both operations
+reject if the vault is not initialized or its key was invalidated during the operation.
 
 Errors from the storage write itself are not wrapped. If storage is full, `setItem` rejects with the
 browser's native `DOMException` (`name === 'QuotaExceededError'`; older Firefox reports
