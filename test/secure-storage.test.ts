@@ -152,6 +152,57 @@ describe('secure storage', () => {
     });
   });
 
+  describe('keys and length', () => {
+    it('returns empty array and 0 length when empty', () => {
+      expect(secureLocalStorage.keys()).toEqual([]);
+      expect(secureLocalStorage.length).toBe(0);
+      expect(secureSessionStorage.keys()).toEqual([]);
+      expect(secureSessionStorage.length).toBe(0);
+    });
+
+    it('lists bVault keys without the prefix and tracks length', async () => {
+      await secureLocalStorage.setItem('alpha', '1');
+      await secureLocalStorage.setItem('beta', '2');
+
+      expect(secureLocalStorage.keys().sort()).toEqual(['alpha', 'beta']);
+      expect(secureLocalStorage.length).toBe(2);
+    });
+
+    it('excludes non-bVault keys from keys() and length', async () => {
+      localStorage.setItem('other-key', 'plain');
+      localStorage.setItem('bv0:old', 'legacy');
+      await secureLocalStorage.setItem('valid', 'encrypted');
+
+      expect(secureLocalStorage.keys()).toEqual(['valid']);
+      expect(secureLocalStorage.length).toBe(1);
+    });
+
+    it('updates keys() and length after removeItem and clear', async () => {
+      await secureLocalStorage.setItem('k1', 'v1');
+      await secureLocalStorage.setItem('k2', 'v2');
+      expect(secureLocalStorage.length).toBe(2);
+
+      secureLocalStorage.removeItem('k1');
+      expect(secureLocalStorage.keys()).toEqual(['k2']);
+      expect(secureLocalStorage.length).toBe(1);
+
+      secureLocalStorage.clear();
+      expect(secureLocalStorage.keys()).toEqual([]);
+      expect(secureLocalStorage.length).toBe(0);
+    });
+
+    it('works independently for secureSessionStorage', async () => {
+      sessionStorage.setItem('unrelated', 'plain');
+      await secureSessionStorage.setItem('sess1', 'val1');
+      await secureSessionStorage.setItem('sess2', 'val2');
+
+      expect(secureSessionStorage.keys().sort()).toEqual(['sess1', 'sess2']);
+      expect(secureSessionStorage.length).toBe(2);
+      expect(secureLocalStorage.keys()).toEqual([]);
+      expect(secureLocalStorage.length).toBe(0);
+    });
+  });
+
   describe('initialization guard', () => {
     it('reports initialization state', async () => {
       expect(isSecureStorageInitialized()).toBe(true);
