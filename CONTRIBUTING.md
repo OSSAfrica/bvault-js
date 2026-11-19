@@ -61,6 +61,18 @@ across reloads in that browser context.
 
 Run `npm run example` for the [browser playground](examples/browser/README.md).
 
+### Code scanning
+
+The explicit [CodeQL workflow](.github/workflows/codeql.yml) scans pull requests
+to `main`, including forks, plus pushes to `main` and a weekly schedule. It scans
+JavaScript/TypeScript and GitHub Actions without installing dependencies or
+executing contributor build scripts. Fork workflows receive no repository secrets.
+
+Maintainers must keep CodeQL's **advanced setup** enabled. GitHub's default setup
+excludes fork PRs and blocks uploads from a custom workflow. The `main` ruleset
+continues to require CodeQL results; missing or failing scans must be investigated
+before merging. Reopen an existing PR to trigger the new workflow after migration.
+
 ## Current design
 
 Development targets the 1.0 browser-storage API described in
