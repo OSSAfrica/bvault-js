@@ -1,3 +1,17 @@
+## bvault-js@1.0.0-preview.2 (preview)
+
+### Prevent concurrent first-run key races (#54)
+
+- fix(storage): prevent concurrent first-run initialization from creating two keys
+
+Share one in-flight promise in initializeSecureStorage() and getOrCreateKey(), write the key with add(), and on ConstraintError re-read the stored key. Closes #8.
+
+- test(storage): cover addData transaction commit semantics
+
+Show that addData() stays pending after request success alone, resolves on transaction completion, rejects on a transaction abort after request success, and rejects with ConstraintError for a duplicate key.
+
+---
+
 ## bvault-js@1.0.0-preview.1 (preview)
 
 ### Invalidate destroyed keys across browser tabs
