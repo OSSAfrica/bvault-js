@@ -179,7 +179,10 @@ and a `toJSON()` method for logging.
 
 - `getOrCreateKey()` returns the cached key, or the key stored in IndexedDB, or
   generates a new non-extractable AES-GCM-256 key, stores it, and calls
-  `navigator.storage.persist()`.
+  `navigator.storage.persist()`. Concurrent callers share one lookup. The key is
+  written with `add()`, which is atomic across tabs, so on a first visit exactly
+  one key is stored. A tab that loses the race discards its key and reads the
+  winner's.
 - `destroyKey()` deletes the key record. Every value encrypted under it becomes
   permanently unreadable.
 - `hasKey()` and `resetKeyCache()` are used by the tests.
@@ -230,8 +233,15 @@ sequenceDiagram
     IDB-->>KS: CryptoKey
   else first run
     KS->>WC: generateKey(AES-GCM-256, extractable=false)
-    KS->>IDB: put keys/storage-key
-    KS->>KS: navigator.storage.persist()
+    KS->>IDB: add keys/storage-key (resolves once the transaction commits)
+    alt another caller or tab wrote first
+      IDB-->>KS: ConstraintError
+      KS->>IDB: get keys/storage-key (fresh transaction)
+      IDB-->>KS: CryptoKey from the winning writer
+      Note over KS: the generated key is discarded
+    else this caller won
+      KS->>KS: navigator.storage.persist()
+    end
   end
   KS-->>SS: CryptoKey handle (cached in memory)
 ```
@@ -381,11 +391,6 @@ has an issue open for contributors.
   AES-GCM as additional authenticated data. Someone who can _write_ to storage
   can move a valid ciphertext from one key to another (for example, copy
   `bv1:a` over `bv1:b`), or restore an old value, and it will still decrypt.
-- **Initialization races ([#8](https://github.com/OSSAfrica/bvault-js/issues/8)).** Two tabs opening at the same time on first run, or
-  two concurrent `initializeSecureStorage()` calls in one tab (for example a
-  React StrictMode double effect), can each generate a key. The last write to
-  IndexedDB wins. Values written by the losing caller can't be read after a
-  reload.
 - **IndexedDB `blocked` and `versionchange` events aren't handled ([#10](https://github.com/OSSAfrica/bvault-js/issues/10)).** A tab
   running an older version can make initialization hang. If the schema check
   finds a store missing, the whole database is deleted, and the key goes with

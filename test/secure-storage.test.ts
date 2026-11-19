@@ -9,8 +9,15 @@ import {
   secureSessionStorage,
   destroySecureStorage,
 } from '../src/index.js';
+import BVaultDB from '../src/lib/bvault-db.js';
+import { decryptWithKey, encryptWithKey } from '../src/lib/crypto.js';
 import { resetSecureStorageState } from '../src/lib/secure-storage.js';
-import { getOrCreateKey, destroyKey, hasKey } from '../src/lib/keystore.js';
+import {
+  getOrCreateKey,
+  destroyKey,
+  hasKey,
+  resetKeyCache,
+} from '../src/lib/keystore.js';
 
 const PREFIX = 'bv1:';
 
@@ -132,6 +139,92 @@ describe('secure storage', () => {
       localStorage.setItem(PREFIX + 'token', raw.slice(0, -4) + 'AAAA');
 
       expect(await secureLocalStorage.getItem('token')).toBeNull();
+    });
+  });
+
+  describe('concurrent first-run initialization', () => {
+    // A fresh copy of keystore.ts has its own in-memory state, like a separate
+    // tab, but talks to the same (fake) IndexedDB.
+    const openTab = async () => {
+      vi.resetModules();
+      return import('../src/lib/keystore.js');
+    };
+
+    beforeEach(async () => {
+      await destroyKey();
+      resetSecureStorageState();
+    });
+
+    it('generates one key when initialized twice at once', async () => {
+      const generate = vi.spyOn(crypto.subtle, 'generateKey');
+
+      await Promise.all([initializeSecureStorage(), initializeSecureStorage()]);
+
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(isSecureStorageInitialized()).toBe(true);
+    });
+
+    it('lets two tabs on first visit share the persisted key', async () => {
+      const tabA = await openTab();
+      const tabB = await openTab();
+
+      const [keyA, keyB] = await Promise.all([
+        tabA.getOrCreateKey(),
+        tabB.getOrCreateKey(),
+      ]);
+
+      const fromA = await encryptWithKey('from-a', keyA);
+      const fromB = await encryptWithKey('from-b', keyB);
+
+      // Each tab can read what the other wrote...
+      expect(await decryptWithKey(fromA, keyB)).toBe('from-a');
+      expect(await decryptWithKey(fromB, keyA)).toBe('from-b');
+
+      // ...and so can a reload, which reads whatever IndexedDB kept.
+      const reloaded = await (await openTab()).getOrCreateKey();
+      expect(await decryptWithKey(fromA, reloaded)).toBe('from-a');
+      expect(await decryptWithKey(fromB, reloaded)).toBe('from-b');
+    });
+
+    it('clears the pending promise when initialization fails', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(crypto.subtle, 'generateKey').mockRejectedValueOnce(
+        new Error('boom'),
+      );
+
+      await expect(initializeSecureStorage()).rejects.toThrow(
+        /initialization failed/,
+      );
+
+      await initializeSecureStorage();
+      expect(isSecureStorageInitialized()).toBe(true);
+    });
+
+    it('propagates errors other than ConstraintError without re-reading', async () => {
+      const getData = vi.spyOn(BVaultDB, 'getData');
+      vi.spyOn(BVaultDB, 'addData').mockRejectedValueOnce(new Error('disk'));
+
+      await expect(getOrCreateKey()).rejects.toThrow('disk');
+
+      // Only the initial lookup ran; a non-constraint failure is not retried.
+      expect(getData).toHaveBeenCalledTimes(1);
+
+      // The failure was neither cached nor left pending, so a retry succeeds.
+      await expect(getOrCreateKey()).resolves.toBeDefined();
+      expect(await hasKey()).toBe(true);
+    });
+
+    it('adopts the stored key when add() loses with a ConstraintError', async () => {
+      const stored = await getOrCreateKey();
+      const ciphertext = await encryptWithKey('x', stored);
+      resetKeyCache();
+
+      // Simulate this lookup running before the other writer's key landed.
+      vi.spyOn(BVaultDB, 'getData').mockResolvedValueOnce(undefined);
+
+      const adopted = await getOrCreateKey();
+
+      expect(await decryptWithKey(ciphertext, adopted)).toBe('x');
     });
   });
 

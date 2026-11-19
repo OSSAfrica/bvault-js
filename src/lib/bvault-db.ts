@@ -14,6 +14,12 @@ interface BVaultDatabase {
     key?: IDBValidKey,
   ): Promise<IDBValidKey>;
 
+  addData(
+    storeName: string,
+    data: any,
+    key?: IDBValidKey,
+  ): Promise<IDBValidKey>;
+
   getData<T>(storeName: string, key: IDBValidKey): Promise<T | undefined>;
 
   getAllData<T>(storeName: string): Promise<T[]>;
@@ -142,6 +148,32 @@ const BVaultDB: BVaultDatabase = {
 
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
+    });
+  },
+
+  /**
+   * Adds a record only if its key is not already present.
+   *
+   * Rejects with a `ConstraintError` when the key exists, so concurrent writers
+   * (other tabs included) cannot overwrite each other. Resolves once the
+   * transaction has committed, not merely when the request succeeds.
+   */
+  async addData(
+    storeName: string,
+    data: any,
+    key?: IDBValidKey,
+  ): Promise<IDBValidKey> {
+    const db = await this.verifyStore(storeName);
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
+
+      const request =
+        key !== undefined ? store.add(data, key) : store.add(data);
+
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onabort = () => reject(transaction.error ?? request.error);
     });
   },
 
